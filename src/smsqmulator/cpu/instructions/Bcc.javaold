@@ -1,0 +1,306 @@
+
+package smsqmulator.cpu.instructions;
+
+import smsqmulator.cpu.DisassembledOperand;
+import smsqmulator.cpu.InstructionSet;
+import smsqmulator.cpu.DisassembledInstruction;
+/*
+ * The Bcc instructions, excluding BRA, BSR.
+ * 
+ * @author and Copyright (c) for my code Wolfgang Lenerz 2013
+ * 
+ * @author and Copyright (c) for his code by Tony Headford, see licence below.
+ * 
+ */
+public class Bcc implements InstructionSet
+{
+    protected final  smsqmulator.cpu.MC68000Cpu  cpu2;
+    protected static final String[] names = {   "bra", "bsr", "bhi", "bls", "bcc", "bcs", "bne", "beq",
+                                                "bvc", "bvs", "bpl", "bmi", "bge", "blt", "bgt", "ble"};
+
+    private static final int C_FLAG = 1;
+    private static final int V_FLAG = 2;
+    private static final int Z_FLAG = 4;
+    private static final int N_FLAG = 8;
+    private static final int X_FLAG = 16;
+
+    public Bcc(  smsqmulator.cpu.MC68000Cpu  cpu)
+    {
+            this.cpu2 = cpu;
+    }
+    public final void register(  smsqmulator.cpu.MC68000Cpu  cpu2)
+    {
+        smsqmulator.cpu.Instruction i;
+        
+        int base = 0x6000;
+        
+
+        smsqmulator.cpu.Instruction ib = new smsqmulator.cpu.Instruction() 
+        {
+            private  smsqmulator.cpu.MC68000Cpu  cpu=cpu2;
+            
+            public void setUp( smsqmulator.cpu.MC68000Cpu  cpu)
+            {
+          //      this.cpu=cpu;
+            }
+            @Override
+            public final void execute(int opcode,smsqmulator.cpu.MC68000Cpu  cpu)
+            {
+                if(testCC((opcode >> 8) & 0x0f))
+                {  
+                    int dis = (opcode & 0xff);
+                    if ((dis&0x80) !=0)
+                        dis|=0xffffff00;
+                    cpu.pc_reg +=dis/2;
+                }
+              //  return 0;
+            }
+            @Override
+            public DisassembledInstruction disassemble(int address, int opcode,smsqmulator.cpu.MC68000Cpu cpu)
+            {
+                    return disassembleOp(address, opcode);
+            }
+            
+            private boolean testCC(int cc)
+            {
+		switch(cc)
+		{
+                    case 2:		//HI:
+                    {
+                            return ((cpu.reg_sr & (C_FLAG | Z_FLAG)) == 0);
+                    }
+                    case 3:		//LS:
+                    {
+                            return ((cpu.reg_sr & (C_FLAG | Z_FLAG)) != 0);
+                    }
+                    case 4:		//CC:
+                    {
+                            return ((cpu.reg_sr & C_FLAG) == 0);
+                    }
+                    case 5:		//CS:
+                    {
+                            return ((cpu.reg_sr & C_FLAG) != 0);
+                    }
+                    case 6:		//NE:
+                    {
+                            return ((cpu.reg_sr & Z_FLAG) == 0);
+                    }
+                    case 7:		//EQ:
+                    {
+                            return ((cpu.reg_sr & Z_FLAG) != 0);
+                    }
+                    case 8:		//VC:
+                    {
+                            return ((cpu.reg_sr & V_FLAG) == 0);
+                    }
+                    case 9:		//VS:
+                    {
+                            return ((cpu.reg_sr & V_FLAG) != 0);
+                    }
+                    case 10:	//PL:
+                    {
+                            return ((cpu.reg_sr & N_FLAG) == 0);
+                    }
+                    case 11:	//MI:
+                    {
+                            return ((cpu.reg_sr & N_FLAG) != 0);
+                    }
+                    case 12:	//GE:
+                    {
+                            int v = cpu.reg_sr & (N_FLAG | V_FLAG);
+                            return (v == 0 || v == (N_FLAG | V_FLAG));
+                    }
+                    case 13:	//LT:
+                    {
+                            int v = cpu.reg_sr & (N_FLAG | V_FLAG);
+                            return (v == N_FLAG || v == V_FLAG);
+                    }
+                    case 14:	//GT:
+                    {
+                            int v = cpu.reg_sr & (N_FLAG | V_FLAG | Z_FLAG);
+                            return (v == 0 || v == (N_FLAG | V_FLAG));
+                    }
+                    case 15:	//LE:
+                    {
+                            int v = cpu.reg_sr & (N_FLAG | V_FLAG | Z_FLAG);
+                            return ((v & Z_FLAG) != 0 || (v == N_FLAG) || (v == V_FLAG));
+                    }
+                }
+                throw new IllegalArgumentException("Invalid Condition Code value!");
+            }
+        };
+
+        smsqmulator.cpu.Instruction iw = new smsqmulator.cpu.Instruction() 
+        { 
+            private  smsqmulator.cpu.MC68000Cpu  cpu=cpu2;
+            
+            public void setUp( smsqmulator.cpu.MC68000Cpu  cpu)
+            {
+           //     this.cpu=cpu;
+            }
+           
+            public final void execute(int opcode,smsqmulator.cpu.MC68000Cpu  cpu)
+            {
+                int dis = cpu.readMemoryWordSigned(cpu.pc_reg*2);
+                if(testCC((opcode >> 8) & 0x0f))
+                {
+                    cpu.pc_reg += dis/2;
+                }
+                else
+                {
+                    cpu.pc_reg += 1;
+                }
+              //  return 0;
+            }
+            @Override
+            public DisassembledInstruction disassemble(int address, int opcode,smsqmulator.cpu.MC68000Cpu  cpu)
+            {
+                    return disassembleOp(address, opcode);
+            }
+                    
+            private boolean testCC(int cc)                  // different from that for byte in case 1
+            {
+		int ccr = cpu.reg_sr & 0x001f;
+
+		switch(cc)
+		{
+                    /*
+                    case 0:		// T
+                    {
+                        return true;
+                    }
+                    case 1:		// normally F   but here it indicates a BSR
+                    {
+                        cpu.addr_regs[7] -= 4;
+                        cpu.writeMemoryLong(cpu.addr_regs[7],cpu.reg_pc+2);
+                        return true;
+                    }
+                    */
+                    case 2:		//HI:
+                    {
+                            return ((ccr & (C_FLAG | Z_FLAG)) == 0);
+                    }
+                    case 3:		//LS:
+                    {
+                            return ((ccr & (C_FLAG | Z_FLAG)) != 0);
+                    }
+                    case 4:		//CC:
+                    {
+                            return ((ccr & C_FLAG) == 0);
+                    }
+                    case 5:		//CS:
+                    {
+                            return ((ccr & C_FLAG) != 0);
+                    }
+                    case 6:		//NE:
+                    {
+                            return ((ccr & Z_FLAG) == 0);
+                    }
+                    case 7:		//EQ:
+                    {
+                            return ((ccr & Z_FLAG) != 0);
+                    }
+                    case 8:		//VC:
+                    {
+                            return ((ccr & V_FLAG) == 0);
+                    }
+                    case 9:		//VS:
+                    {
+                            return ((ccr & V_FLAG) != 0);
+                    }
+                    case 10:	//PL:
+                    {
+                            return ((ccr & N_FLAG) == 0);
+                    }
+                    case 11:	//MI:
+                    {
+                            return ((ccr & N_FLAG) != 0);
+                    }
+                    case 12:	//GE:
+                    {
+                            int v = ccr & (N_FLAG | V_FLAG);
+                            return (v == 0 || v == (N_FLAG | V_FLAG));
+                    }
+                    case 13:	//LT:
+                    {
+                            int v = ccr & (N_FLAG | V_FLAG);
+                            return (v == N_FLAG || v == V_FLAG);
+                    }
+                    case 14:	//GT:
+                    {
+                            int v = ccr & (N_FLAG | V_FLAG | Z_FLAG);
+                            return (v == 0 || v == (N_FLAG | V_FLAG));
+                    }
+                    case 15:	//LE:
+                    {
+                            int v = ccr & (N_FLAG | V_FLAG | Z_FLAG);
+                            return ((v & Z_FLAG) != 0 || (v == N_FLAG) || (v == V_FLAG));
+                    }
+                }
+            throw new IllegalArgumentException("Invalid Condition Code value!");
+	}
+        };
+
+        for(int cc = 2; cc < 16; cc++)
+        {
+            cpu2.addInstruction(base + (cc << 8), iw);
+            for(int dis = 1; dis < 256; dis++)
+            {
+                cpu2.addInstruction(base + (cc << 8) + dis, ib);
+            }
+        }
+    }
+
+
+    protected final DisassembledInstruction disassembleOp(int address, int opcode)
+    {
+            DisassembledOperand op;
+
+            int cc = (opcode >> 8) & 0x0f;
+            int dis = opcode & 0xff;
+            if ((dis&0x80) !=0)
+                dis|=0xffffff00;
+            String name;
+
+            if(dis != 0)
+            {
+                    op = new DisassembledOperand(String.format("$%08x", dis + address + 2));
+                    name = names[cc] + ".s";
+            }
+            else
+            {
+                    //word displacement
+                    dis = cpu2.readMemoryWordSigned(address + 2);
+                    op = new DisassembledOperand(String.format("$%08x", dis + address + 2), 2, dis);
+                    name = names[cc] + ".w";
+            }
+
+            return new DisassembledInstruction(address, opcode, name, op);
+    }
+
+}
+
+/*
+//  M68k - Java Amiga MachineCore
+//  Copyright (c) 2008-2010, Tony Headford
+//  All rights reserved.
+//
+//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+//  following conditions are met:
+//
+//    o  Redistributions of source code must retain the above copyright notice, this list of conditions and the
+//       following disclaimer.
+//    o  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+//       following disclaimer in the documentation and/or other materials provided with the distribution.
+//    o  Neither the name of the M68k Project nor the names of its contributors may be used to endorse or promote
+//       products derived from this software without specific prior written permission.
+//
+//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+//  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+*/

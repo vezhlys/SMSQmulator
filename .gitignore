@@ -23,6 +23,7 @@ doc/javadoc
 
 # Other
 *.form
+.directory
 manifest.mf
 build.xml
 

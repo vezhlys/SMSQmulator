@@ -134,7 +134,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
             {
                 java.awt.GraphicsDevice device = gd.getDevice();
                 
-                if (os.contains("mac"))  
+                /*if (os.contains("mac"))  
                 {
                     try
                     {
@@ -147,7 +147,8 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
                         device.setFullScreenWindow(this);
                     }
                 }
-                else if (os.contains("windows"))
+                else */
+                if (os.contains("windows"))
                 {
                     this.setExtendedState(javax.swing.JFrame.MAXIMIZED_BOTH); 
                 }
@@ -166,7 +167,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
         else
             this.setLocation(this.inifile.getOptionAsInt("WDW-XPOS",0),this.inifile.getOptionAsInt("WDW-YPOS",0));
         
-        if (os.contains("mac"))                          // code contributed by Tobias Fröschle
+        /*if (os.contains("mac"))                          // code contributed by Tobias Fröschle
         {
             final MonitorGui mon = this;
             // 1. get the Mac application
@@ -187,7 +188,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
                 }
             });
             this.isMac = true;
-        }
+        }*/
         screen.setIsMac(this.isMac);
         
         initComponents();                                   // setup netbeans created components

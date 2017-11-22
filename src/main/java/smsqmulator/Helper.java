@@ -8,16 +8,18 @@ package smsqmulator;
  * @author and copyright (C) Wolfgang Lenerz 2010-2014.
  * 
  * @version 
- * 1.03 converttoSMQQE (char c) introduced.
+ * 1.04 handles conversion for øå¿æÑÆŒ€
+ * 1.03 convertToSMSQE (char c) introduced.
  * 1.02 writeSMSQEString no longer used (is in cpu anyway)
  * 1.01 ConvertStringToInt don't skip last char anymore.
  */
 public class Helper 
 {
-    private final static String javaAcc="@[]£{|}~äéöüçœàñáâëèêïíîóôùúûßÄÉÖÜÇ"; // these java accented chars will be converted to ...
+    private final static String javaAcc="@[]£{|}~äéöüçœàñáâëèêïíîóôùúûßÄÉÖÜÇøå¿æÑÆŒ€"; // these java accented chars will be converted to ...
     private final static int []smsqeBytes={64,91,93,96,123,124,125,126,128,131,// ...these SMSQE chars and vice-versa.
                        132,135,136,139,141,137,140,142,143,144,145,146,147,149,
-                       150,152,154,153,155,156,160,163,164,167,168};
+                       150,152,154,153,155,156,160,163,164,167,168,134,130,180,
+                       138,169,170,171,181};
     
     /**
      *This shows an error window with a title and a warning string.

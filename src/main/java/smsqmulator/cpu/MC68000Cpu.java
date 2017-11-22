@@ -33,10 +33,11 @@ import smsqmulator.Types;
  *  <li>Z+1 ...    : "ROM" i.e. the OS: may be read from but not written to (except special case).</li>
  * </ul>
  * 
- * @author and copyright (c) 2012 - 2016 Wolfgang Lenerz
+ * @author and copyright (c) 2012 - 2017 Wolfgang Lenerz
  * Based on Tony Headford's code, see his copyright in the attached file.
  * <p>
  * @version :
+ *   2.13 writeSMSQEString : if string is empty but not null, write 0 word ; set and removeKeyrow : do not presume sysvars at $28000.
  *   2.12 RESET instruction is actually linked in (though it doesn't really do anything)..
  *   2.11 fillBlock, xorBlock deleted ; setEmuScreenMode fallthrough method implemented.
  *   2.10 setcopyScreen implemented.
@@ -1733,10 +1734,15 @@ public class MC68000Cpu
     public void writeSmsqeString(int address,String s,boolean writeLength,int maxLength)
     {
         address&=MC68000Cpu.cutOff;
-        if((s==null)|| (s.isEmpty()))
+        if(s==null)
             return;                                         // strange string, or writing normal string to screen mem : that doesn't make sense here!
+        if  (s.isEmpty())
+        {
+            if (writeLength)
+                this.mainMemory[address/2]=0;
+            return;
+        }
         int count=s.length(); 
-        
         if ((maxLength!=-1) && (count>maxLength))
         {
             count=maxLength;
@@ -2183,7 +2189,8 @@ public class MC68000Cpu
      */
     public void setKeyrow(int row,int col)
     {
-        int add=readMemoryLong(0x280e8)+0x22+row;
+        int add=readMemoryLong(0x400);
+        add=readMemoryLong(add+0xe8)+0x22+row;
         int current=readMemoryByte(add);
         col=1<<col;
         current |=col;
@@ -2198,8 +2205,9 @@ public class MC68000Cpu
      */
     public void removeKeyrow(int row,int col)
     {
-        int current;
-        int add=readMemoryLong(0x280e8)+0x22+row;
+        int current;        
+        int add=readMemoryLong(0x400);
+        add=readMemoryLong(add+0xe8)+0x22+row;
         try
         {
             current=readMemoryByte(add);
@@ -2301,6 +2309,7 @@ public class MC68000Cpu
         }
         if (!this.romLoadedOK)
             return;                                         // no  rom loaded yet, nothing to do.
+    
         writeMemoryLong(0x1000a,0x476f6c64);                // ******************************************** necesaary for some c progs (why?)
         this.pc_reg=this.totRamSize/2;                      // set PC to start of "ROM" = image that was loaded
         writeMemoryLong(this.ramSize-4,this.ramSize);       // show top of ram

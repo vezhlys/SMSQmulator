@@ -4,13 +4,12 @@
  */
 package smsqmulator;
 
-
 /**
  * This just contains static data types.
- * v. 1.01 removed linkage_keyrow
- * v. 1.02 communication with java is now based on A line (instructions $a000  +) instead of eb00+.
+ * v. 1.01 removed linkage_keyrow.
+ * v. 1.02 communication with java is now based on A line (instructions $a000 +) instead of eb00+.
  * 
- * @author and copyright (C) Wolfgang Lenerz 2012-2016
+ * @author and copyright (C) Wolfgang Lenerz 2012-2017
  */
 public class Types 
 {
@@ -29,6 +28,7 @@ public class Types
     public static final int TRAPA = TRAP9+1;
     public static final int TRAPB = TRAPA+1;
     public static final int TRAPC = TRAPB+1;
+    public static final int TRAPD = TRAPC+1;
     // note $ab00 + are for ieee  FP ops.
     
     
@@ -93,8 +93,10 @@ public class Types
     public static final int LINKAGE_WIN_USE= LINKAGE_SFA_USE+4;// name for WIN device 4 bytes
     public static final int LINKAGE_FLP_USE= LINKAGE_WIN_USE+4;// name for flp device 4 bytes
     public static final int LINKAGE_MEM_USE= LINKAGE_FLP_USE+4;// name for flp device 4 bytes
-    public static final int LINKAGE_RANDOM=LINKAGE_MEM_USE+4;   // space for random number, 2 bytes
-    public static final int LINKAGE_LENGTH=LINKAGE_RANDOM+12;//  some slack space et end
+    public static final int LINKAGE_RANDOM=LINKAGE_MEM_USE+4;  // space for random number, 2 bytes
+    public static final int LINKAGE_MSEWHEEL=LINKAGE_RANDOM+4; // mouse wheel params (char | nbr rorations)
+    public static final int LINKAGE_SJBID=LINKAGE_MSEWHEEL+4; // job ID of syncscrap job
+    public static final int LINKAGE_LENGTH=LINKAGE_SJBID+12;// some slack space at end
     
     public static final short HWinitStart1=0x4a61;        //start of String "Java Emul"
     public static final short HWinitStart2=0x7661;
@@ -111,6 +113,6 @@ public class Types
     
     public static short [] SMSQMULATOR_CONFIG_FLAG={0x3c3c,0x534d,0x5351,0x4d55,0x4c41,0x544f,0x5258,0x3e3e};//"<<SMSQMULATORX>>"
     public static final int SRMask=0xa71f;
-    public final static String MINIMUM_VERSION_NEEDED ="3.31";  // also modify this in smsq_java_hwinit_asm
-    public final static String MINIMUM_MINOR_VERSION_NEEDED ="0000";  // also modify this in smsq_java_hwinit_asm
+    public final static String MINIMUM_VERSION_NEEDED ="3.32";  // also modify this in smsq_java_hwinit_asm
+    public final static String MINIMUM_MINOR_VERSION_NEEDED ="0001";  // also modify this in smsq_java_hwinit_asm
 }

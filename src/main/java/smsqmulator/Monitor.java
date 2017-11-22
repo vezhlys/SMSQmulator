@@ -23,9 +23,9 @@ package smsqmulator;
  *
  * The monitor outo=puts to two windows (instruction and data windows) and has an input wdw, see the MonitorPanel object.
  * @see smsqmulator.Monitor#showHelp() 
- * @author and copyright (c) Wolfgang Lenerz 2012-2016. Very loosely based on Tony Headford's work, see his licence below.
+ * @author and copyright (c) Wolfgang Lenerz 2012-2017. Very loosely based on Tony Headford's work, see his licence below.
  * @version 
- * 1.18
+ * 1.18 inputMouseWheel created, when setting device names handle "./".
  * 1.17 setCopyScreen amended to suit jva_qlscremu ; setNamesForDrives; forceRemoval parameter to force "unmount" of 
  *      exiting drives and remount.
  * 1.16 setCopyScreen implemented, changeMemSize: provide for alternate CPU, reset cpu for floppy if cpu changed in changeMemSize.
@@ -137,10 +137,12 @@ public class Monitor
             this.floppy = new FloppyDriver (this.cpu,inifile);
             this.trapDispatcher.setFloppy(this.floppy);
         }
-  /*  
+    
+ /*
         SWinDriver pw=new SWinDriver(this.cpu,false);
         this.trapDispatcher.setSwin(pw);
-    */    
+   */
+ 
         try
         {
             this.debugFilename=(System.getProperty( "user.home" )+java.io.File.separator+"SMSQmulatorDebug.txt");// log file
@@ -485,6 +487,7 @@ public class Monitor
             this.goThread=new MonitorGoThread(nbrInst,this.cpu,this.breakpoints,this,this.debugFilename,this.watchBreakpoints, 
                     this.logInstructions,this.ih,this.fastMode,this.trapDispatcher,this.upperLimit,this.checkmem,this.memoryToBeWatched,provbkp,this.excludeSuper);
             setCondition();
+            this.goThread.setName("Main emulation thread");
             this.goThread.start();
             setFocusToEmulScreen();
         }
@@ -1331,6 +1334,20 @@ public class Monitor
         this.cpu.writeMemoryWord(this.cpu.getLinkageBlock()+Types.LINKAGE_MOUSEBTN,btn);
         this.trapDispatcher.resetCounter();
     }
+    
+    /**
+     * Gets the mouse wheel movement into the emulation.
+     *  *** This is called from the swing EDT***.
+     * 
+     * @param wheel  the wheel rotation & char
+     */
+    public void inputMouseWheel(int wheel)
+    {
+        if (!this.cpu.isRomLoadedOk())
+            return;
+        this.cpu.writeMemoryLong(this.cpu.getLinkageBlock()+Types.LINKAGE_MSEWHEEL,wheel);
+        this.trapDispatcher.resetCounter();
+    }
       
     
     /**
@@ -1540,7 +1557,7 @@ public class Monitor
         this.cpu=null;
         this.trapDispatcher.setCpu(null);
         this.ih.setCpu(null);
-        this.sam.setMemory(null);
+//        this.sam.setMemory(null);
         if (this.floppy!=null)
             this.floppy.setCPU(null);
         if (allowEmulation)
@@ -1552,7 +1569,7 @@ public class Monitor
             this.ih.setCpu(this.cpu);
             this.ih.setScreen(screen);
             this.trapDispatcher.setCpu(this.cpu);
-            this.sam.setMemory(this.cpu.getMemory());
+         //   this.sam.setMemory(this.cpu.getMemory());
             if (this.floppy!=null)
                 this.floppy.setCPU(this.cpu);
             goCommand(null,0);

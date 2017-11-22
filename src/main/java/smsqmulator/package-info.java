@@ -15,10 +15,49 @@
  * 
  * <p>
  *  ----------------- SMSQmulator versions -------------------------<p>
- * 
+ * <b>v.2.25</b>
+ * <p> Improvements: SoundDevice can do resampling, different (hopefully better) way of handling mouse scroll wheel. JVA_SYNCSCRAP, "/" may be replaced by 
+ * <p> Bugfixes (for windrives, win_drive$, setting drives for devices with different usage names, IEEE floats...)
+ * <ul>
+ *    <li> SMSQ/E
+ *      <ul> 
+ *          <li> JVA_SYNCSCRAP added.</li>
+ *          <li> driver_snd_ssss_asm modified totally.</li>
+ *      </ul>
+ *    </li>
+ *    <li> SMSQmulator
+ *      <ul>
+ *          <li>SoundDevice v.1.02 add resampling for 22.5 Khz dataline.</li>
+ *          <li>SMSQmulator v.1.23 set new parameter for SoundDevice ; config item MOUSEWHEEL-ACCEL ; new way of handling finding of ini file ; 
+ *              ./ expansion added ; may use command line parameter = entire ini file path.</li>
+ *          <li>MC68000Cpu  v.2.13 writeSMSQEString : if string is empty but not null, write 0 word ; set and removeKeyrow : do not presume sysvars at $28000.</li>
+ *          <li>XfaDriver v.1.06 openFile as directory, use root dir if no part of the file is a dir ; use correct subdir found, if any.</li>
+ *          <li>Monitor v.1.18 inputMouseWheel created, when setting device names handle "./".</li>
+ *          <li>Screen v.1.21 different way of handling mousewheel ; setMousewheelAccel created.</li>
+ *          <li>TrapDispatcher v.1.22 don't add fileseparator at end of name if it is for win or mem drive ; get/setNamesForDives: if 
+ *              device not found in map (different usage name) use getDeviceFromMapValues ; expand scrap operations to include
+ *              starting/stopping of clipboard monitor thread, all scrap ops now in TRAP D ; setDirForDrive : passing a single space is the 
+ *              same as no name at all ; trap c modified for JVA_IS_QLSCREMU%</li>
+ *          <li>WinFile v.1.07 when getting the length of the root dir, get the length set in root sector minus the fileheader length..</li>
+ *          <li>Helper v.1.04 handles conversion for øå¿æÑÆŒ€.</li>
+ *          <li>NfaFileheader v.1.08 setAttrs implemented, try to set some native file attributes in header..</li>
+ *          <li>XfaFile v.1.11  use NfaFileheader.setAttrs in makeDirBuffer to set some file attributes in SMSQE file header.</li>
+ *          <li>Arith v.1.09 sometimes we need to round up the result (in double2QlFloat).</li>
+ *          <li>IPHandler v.1.02 handleTrap added case 7.</li>
+ *          <li>MonitorGui v.1.33 when setting device names, show to what "./" will be expanded.</li> 
+ *          <li>DriveAssignmentsDialog v.1.05 show to what directory "./" will be expanded.</li>
+ *          <li>Screen32 v.1.14 getColoursFromStipple correctly for horizontal stripes.</li>
+ *          <li>SampledSound v. 1.05 interface SMSQE  to this object totally revamped, all the buffering is now done in java</li>
+ *          <li>Sounddevice v. 1.03 revamped, uses SampledSound to actually play the sound.</li>
+ *          <li>.</li>
+ *          <li>.</li>
+ *      </ul>
+ *    </li>
+ * </ul>
+ *
  *  
  * <b>v.2.24</b>
- * <p> Bugfixes : devices submenu pointer position corrected, win_use$/win_drive$ gets name even if devoce hase different usage name.
+ * <p> Bugfixes : devices submenu pointer position corrected, win_use$/win_drive$ gets name even if device hase different usage name.
  * <p> Feature : CTRL + mousewheel produces left/right scroll keycodes
  * <ul>
  *    <li> SMSQ/E
@@ -26,7 +65,7 @@
  *    <li> SMSQmulator
  *      <ul>
  *          <li>MonitorGui v.1.32 setDeviceNames : when setting the ptr. pos. for opening the dad wdw, use a new point if ptr is outsie the wdw.</li>
- *          <li>WinDir v.1.05 deleteFile: if file to be deleted is a subdir of mine, and if it is deleted, rebuild subdir list..</li>
+ *          <li>WinDir v.1.05 deleteFile: if file to be deleted is a subdir of mine, and if it is deleted, rebuild subdir list.</li>
  *          <li>Screen v.1.20  CTRL + mousewheel produces left/right scroll keycodes.</li>
  *          <li>TrapDispatcher v.1.21 get drivename (trap5,15) gets name even if device hae different usage name ; 
  *                  trap 5; cases 28,29,30,36,37 : interface change, needs smsqe 3.31.</li>
@@ -34,8 +73,6 @@
  *          <li>MOVEAnWxx (all) byte size was indicated wrongly as word size when disassembling.</li>
  *          <li>IPHandler v.1.01 interface change for get_netname (case 6), needs at least 3.30.0002.</li>
  *          <li>MC6800Cpu v.2.12 RESET instruction is actually linked in.</li>
- *          <li>.</li>
- *          <li>.</li>
  *      </ul>
  *    </li>
  * </ul>
@@ -52,9 +89,6 @@
  *          <li>XfaFile v.1.10 don't show files whose filenames are too long.</li>
  *          <li>Screen v.1.19 CTRl-Shift +a..z produces keys 160+ ; mac : ctrl shift c is not the same as ctrl c.</li>
  *          <li>TrapDispatcher v.1.20 resetDrives, use map.values directly.</li>
- *          <li>.</li>
- *          <li>.</li>
- *          <li>.</li>
  *      </ul>
  *    </li>
  * </ul>

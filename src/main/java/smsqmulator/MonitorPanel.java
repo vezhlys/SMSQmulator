@@ -9,7 +9,8 @@ package smsqmulator;
  * 
  *  @author and copyright (c) Wolfgang Lenerz 2014-2016.
  * 
- *  @version 
+ *  @version
+ *  1.02 implement MouseWheelListener to increase font size with CTRL+mousewheel
  *  1.01 history also implements down keystroke.
  *  1.00 creation (copied from the old panel in the old MonitorGui).
  */
@@ -54,8 +55,9 @@ public class MonitorPanel extends javax.swing.JPanel
         this.registerTextArea.setColumns(20);
         this.registerTextArea.setFont(new java.awt.Font("Monospaced", 0, 10)); 
         this.registerTextArea.setRows(5);
-        
         jScrollPane1.setViewportView(this.registerTextArea);
+        MWListener mwlR=new MWListener(this.registerTextArea,jScrollPane1);        
+        this.registerTextArea.addMouseWheelListener(mwlR);
         
         javax.swing.GroupLayout registerPanelLayout = new javax.swing.GroupLayout(registerPanel);
         registerPanel.setLayout(registerPanelLayout);
@@ -76,8 +78,9 @@ public class MonitorPanel extends javax.swing.JPanel
         this.dataTextArea.setColumns(20);
         this.dataTextArea.setFont(new java.awt.Font("Monospaced", 0, 10)); // NOI18N
         this.dataTextArea.setRows(5);
-        
         jScrollPane2.setViewportView(this.dataTextArea);
+        MWListener mwlD=new MWListener(this.dataTextArea,jScrollPane2);        
+        this.dataTextArea.addMouseWheelListener(mwlD);
         
          javax.swing.GroupLayout dataPanelLayout = new javax.swing.GroupLayout(dataPanel);
         dataPanel.setLayout(dataPanelLayout);
@@ -211,4 +214,46 @@ public class MonitorPanel extends javax.swing.JPanel
     {
         this.jSplitPane1.setDividerLocation(temp);
     }
+    
+    
+    private class MWListener implements java.awt.event.MouseWheelListener
+    {
+        private final javax.swing.JTextArea ta;
+        private final javax.swing.JScrollPane jScrollPane;
+      
+        private MWListener (javax.swing.JTextArea t,final javax.swing.JScrollPane myScrollPane)
+        {
+            this.ta=t;
+            this.jScrollPane=myScrollPane;
+        }
+
+        @Override
+        public void mouseWheelMoved(java.awt.event.MouseWheelEvent e)
+        {
+            if (e.isControlDown()) 
+            {    
+                java.awt.Font f=this.ta.getFont();
+                float s=f.getSize();
+                if (e.getWheelRotation() < 0) 
+                {            
+                    s++;
+                    if (s>60)
+                       s=60;
+                } 
+                else 
+                {   
+                    s--;
+                    if (s<4)
+                       s=4;          
+                }
+                java.awt.Font newFont = f.deriveFont(s);
+                this.ta.setFont(newFont);
+                e.consume();
+            }    
+            else
+            {
+                this.jScrollPane.dispatchEvent(e);
+            }
+        }
+    }    
 }

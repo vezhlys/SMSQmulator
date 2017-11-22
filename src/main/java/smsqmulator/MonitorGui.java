@@ -5,9 +5,10 @@ package smsqmulator;
  * 
  * It contains a Screen object.
  * 
- * @author and copyright (c) Wolfgang Lenerz 2012-2016.
+ * @author and copyright (c) Wolfgang Lenerz 2012-2017.
  * 
  * @version 
+ * 1.33 when setting device names,, show to what "./" will be expanded
  * 1.32 setDeviceNames : when setting the ptr. pos. for opening the dad wdw, use a new point if ptr is outsie the wdw.
  * 1.31 device names set from within SMSQ/E are stored in the inifile ; new config item locked 
  *      qxl.win files may be read only ; SUSPEND-WHEN-ICONIFIED state is actually loaded at startup ;
@@ -343,6 +344,10 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
             this.ssss20KHzCheckBoxMenuItem.setSelected(true);   
         else
             this.ssss22KHzCheckBoxMenuItem.setSelected(true); 
+        
+        int accel=inifile.getOptionAsInt("MOUSEWHEEL-ACCEL", 0);
+        if (accel>0 & accel<10)
+            this.screen.setMousewheelAccel(accel);
     }
     
     /**
@@ -594,11 +599,11 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
      * @param oldNames the array currently holding the names
      * @param deviceName string name of device, 3 letters, uppercased.
      * @param dType which device.
-     * @param mustBeDir  true if file to be chosen must be a dir0
+     * @param mustBeDir true if file to be chosen must be a dir.
      */
     private void setDeviceNames(String[] oldNames,String deviceName,int dType,boolean mustBeDir) 
     {                                               
-        this.dad=new DriveAssignmentsDialog(this,true,oldNames,deviceName,mustBeDir);
+        this.dad=new DriveAssignmentsDialog(this,true,oldNames,deviceName,mustBeDir,this.inifile.getOptionValue("EXPANDED_DIR"));
         java.awt.Point p = this.getMousePosition();
         if (p==null)
             p=new java.awt.Point();
@@ -607,7 +612,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
             return;
         
         String []newNames = this.dad.getOptions();
-        setAndStoreDeviceNames(deviceName,oldNames,newNames,mustBeDir);
+        setAndStoreDeviceNames(deviceName,oldNames,newNames,mustBeDir);// changes content of oldNames
         this.monitor.setNamesForDrives(dType,oldNames,false);
     }
     
@@ -622,7 +627,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
     */
     private void setAndStoreDeviceNames(String deviceName,String []oldNames,String[] newNames,boolean mustBeDir) 
     {
-              for (int i=0;i<8;i++) 
+        for (int i=0;i<8;i++) 
         {
             if (mustBeDir && newNames[i]!=null && !newNames[i].isEmpty() && (!newNames[i].endsWith(java.io.File.separator)))
                oldNames[i]=newNames [i]+ java.io.File.separator;
@@ -1018,6 +1023,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
         this.memDisableCheckBoxMenuItem.setText(Localization.Texts[120]);
         this.idleMenuItem.setText(Localization.Texts[121]);
         this.mouseClickDelayMenuItem.setText(Localization.Texts[127]);
+        this.mousewheelAccelItem.setText(Localization.Texts[148]+ ": "+this.inifile.getOptionValue("MOUSEWHEEL-ACCEL"));
         this.allowScreenEmulationjCheckBoxMenuItem.setText(Localization.Texts[142]);
         this.popupActionMenu.setText(Localization.Texts[145]);
             this.popupOpenWdwCheckBoxMenuItem.setText(Localization.Texts[146]);
@@ -1539,14 +1545,14 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
      */
     private void getOptions()
     {
-        String nfa;
+        String nfa =this.inifile.getOptionValue("EXPANDED_DIR");
         int temp;
        
-        getDriveNames("NFA",this.nfaNames,true);
-        getDriveNames("SFA",this.sfaNames,true);
-        getDriveNames("WIN",this.winNames,false);
-        getDriveNames("MEM",this.memNames,false);
-        getDriveNames("FLP",this.flpNames,false);               // get names for drives
+        getDriveNames("NFA",this.nfaNames,true,nfa);
+        getDriveNames("SFA",this.sfaNames,true,nfa);
+        getDriveNames("WIN",this.winNames,false,nfa);
+        getDriveNames("MEM",this.memNames,false,nfa);
+        getDriveNames("FLP",this.flpNames,false,nfa);               // get names for drives
        
         if (this.monitor!=null)
         {
@@ -1648,7 +1654,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
      * @param driveNames the array to fill in with the names
      * @param addSep true if a file separator should be added at end (yes if were looking for a dir, no if we're looking for a file)
      */
-    private void getDriveNames(String drive,String [] driveNames, boolean addSep)
+    private void getDriveNames(String drive,String [] driveNames, boolean addSep,String expandTo)
     {
         String p;
         for (int i=0;i<8;i++)
@@ -1658,6 +1664,8 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
             {
                 if ( addSep &&!p.isEmpty() && !p.endsWith(java.io.File.separator))
                     p+=java.io.File.separator;
+                if (p.startsWith("./"))
+                    p=expandTo+p.substring(2);
                 driveNames[i]=p;                                // set the names for the drives
             }
         }
@@ -1682,7 +1690,11 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
             }
         }
     }
-            
+           
+    public void iconify()
+    {
+        this.setExtendedState(ICONIFIED);
+    }
     /**
      * Sets the option in the inifile and saves the inifile.
      * (Options in inifile are (name = value) pairs).
@@ -1863,6 +1875,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
         popupBlinkCheckBoxMenuItem = new javax.swing.JCheckBoxMenuItem();
         jSeparator9 = new javax.swing.JPopupMenu.Separator();
         mouseClickDelayMenuItem = new javax.swing.JMenuItem();
+        mousewheelAccelItem = new javax.swing.JMenuItem();
         dateOffsetMenuItem = new javax.swing.JMenuItem();
         menuBarInvisibleMenuItem = new javax.swing.JMenuItem();
         jSeparator7 = new javax.swing.JPopupMenu.Separator();
@@ -2550,6 +2563,16 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
         });
         configMenu.add(mouseClickDelayMenuItem);
 
+        mousewheelAccelItem.setText("Mousewheel acceleration factor");
+        mousewheelAccelItem.addActionListener(new java.awt.event.ActionListener()
+        {
+            public void actionPerformed(java.awt.event.ActionEvent evt)
+            {
+                mousewheelAccelItemActionPerformed(evt);
+            }
+        });
+        configMenu.add(mousewheelAccelItem);
+
         dateOffsetMenuItem.setText("Time correction");
         dateOffsetMenuItem.addActionListener(new java.awt.event.ActionListener()
         {
@@ -2774,6 +2797,11 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
         setOptionAndSave("SSSS-FREQUENCY","22");
     }//GEN-LAST:event_ssss22KHzCheckBoxMenuItemActionPerformed
 
+   /**
+     * Menu item action : Show java version.
+     * 
+     * @param evt ignored.
+     */
     private void javaVersionMenuItemActionPerformed(java.awt.event.ActionEvent evt)//GEN-FIRST:event_javaVersionMenuItemActionPerformed
     {//GEN-HEADEREND:event_javaVersionMenuItemActionPerformed
         java.net.URL imgURL = MonitorGui.class.getResource("images/combined.png");// get my icon
@@ -2789,6 +2817,46 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
                            " from "+System.getProperty("java.vendor"),"SMSQmulator ",1);
         }
     }//GEN-LAST:event_javaVersionMenuItemActionPerformed
+
+    /**
+     * Menu item action : Sets the value for the mousewheel acceleration.
+     * 
+     * @param evt ignored.
+     */
+    private void mousewheelAccelItemActionPerformed(java.awt.event.ActionEvent evt)//GEN-FIRST:event_mousewheelAccelItemActionPerformed
+    {//GEN-HEADEREND:event_mousewheelAccelItemActionPerformed
+        boolean errValue=true;
+        String s = this.inifile.getOptionValue("MOUSEWHEEL-ACCEL") ;
+        while (errValue)
+        { 
+            s = (String)javax.swing.JOptionPane.showInputDialog(
+                    this,
+                    Localization.Texts[148]+ " (1 - 9)",
+                    Localization.Texts[148],
+                    javax.swing.JOptionPane.PLAIN_MESSAGE,
+                    null,
+                    null,
+                    s);
+            if (s==null || s.isEmpty())
+                return;
+            try
+            {
+                int accel=Integer.parseInt(s);
+                if (accel>0 && accel<10)
+                {
+                    this.screen.setMousewheelAccel(accel);
+                    this.setOptionAndSave("MOUSEWHEEL-ACCEL",""+accel);
+                    this.mousewheelAccelItem.setText(Localization.Texts[148]+ ": "+accel);
+                    errValue=false;
+                }
+            }
+
+            catch (Exception e)
+            {
+                javax.swing.JOptionPane.showMessageDialog(this, s+Localization.Texts[90], Localization.Texts[45],javax.swing.JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }//GEN-LAST:event_mousewheelAccelItemActionPerformed
       
     
     
@@ -2864,6 +2932,7 @@ public class MonitorGui extends javax.swing.JFrame implements MonitorHandler
     private javax.swing.JMenuItem menuBarInvisibleMenuItem;
     private javax.swing.JCheckBoxMenuItem monitorVisibleCheckBoxMenuItem;
     private javax.swing.JMenuItem mouseClickDelayMenuItem;
+    private javax.swing.JMenuItem mousewheelAccelItem;
     private javax.swing.JCheckBoxMenuItem nfaDisableCheckBoxMenuItem;
     private javax.swing.JRadioButtonMenuItem nfaNameLowerCaseRadioButton;
     private javax.swing.JRadioButtonMenuItem nfaNameUnchangedRadioButton;

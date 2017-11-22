@@ -5,9 +5,10 @@ package smsqmulator;
  * It produces the BEEP via a SourceDataLine.
  * BEEP duration,pitch1,pitch2,interval,step
  * <p>
- * ---- The rest of the beep parameters are ignored !
+ * ---- The rest of the QL beep parameters are ignored !
+ * The sound is played via an independent thread.
  * 
- * @author and copyright (C) Wolfgang Lenerz 2012+2015
+ * @author and copyright (C) Wolfgang Lenerz 2012-2017.
  * @version
  *  v. 1.05 improved parameter handling, should produce sounds closer to the original.
  *  v. 1.04 kill sound before playing new one.
@@ -18,28 +19,29 @@ package smsqmulator;
  */
 public class Beep
 {
-    private boolean bBigEndian=true;                        // true
+    private static final boolean BIG_ENDIAN=true;           // true
     private boolean canPlay=true;
-    private javax.sound.sampled.SourceDataLine sdl;
-    private static final float SAMPLE_RATE = 44100;
+    private javax.sound.sampled.SourceDataLine sdl;         // used to play the sound
+    private static final float SAMPLE_RATE = 44100;         // CD quality
     private static final int channels=1;                    // 1 channel
     private static final int bits=8;                        // 8 bits
-    private static final boolean signed=false;              // unsigned bytes
-    private static final double RAD = 2.0 * Math.PI;
-    private double vol=1.0;
-    private int beepStateInSysvars=0;
-    private javax.sound.sampled.FloatControl volume;
+    private static final boolean SIGNED=false;              // unsigned bytes
+    private static final double RAD = 2.0 * Math.PI;        // radian factor
+    private double vol=1.0;                                 // sound volume
+    private int beepStateInSysvars=0;                       // how the SMSQ/E sees beeping as active or nor
+    private javax.sound.sampled.FloatControl volume;        // volume control
+    
     
     /**
-     * Creates the object.
-     * This sets up a sourcedataline.
-     * @param percentage the volumne in percent, from 100 = loudest to 0 = no beep
+     * Creates the object, setting up a sourcedataline.
+     * 
+     * @param percentage the volumne in percent, from 100 = loudest to 0 = no beep.
      */
     public Beep(int percentage)
     {
         try
         {
-            javax.sound.sampled.AudioFormat af=new javax.sound.sampled.AudioFormat(SAMPLE_RATE,bits,channels,signed,bBigEndian);
+            javax.sound.sampled.AudioFormat af=new javax.sound.sampled.AudioFormat(SAMPLE_RATE,bits,channels,SIGNED,BIG_ENDIAN);
             this.sdl=(javax.sound.sampled.SourceDataLine) javax.sound.sampled.AudioSystem.getLine(new javax.sound.sampled.DataLine.Info(javax.sound.sampled.SourceDataLine.class,af));
             this.sdl.open(af);
         }
@@ -51,10 +53,10 @@ public class Beep
         try
         {
             this.volume= (javax.sound.sampled.FloatControl) this.sdl.getControl(javax.sound.sampled.FloatControl.Type.VOLUME);
-            setVolume(percentage);                          // try to get a volume control
+            setVolume(percentage);                          // try to get a normal volume control
         }
         catch (Exception e) 
-        {
+        {                                                   // couldn't
             try
             {
                 this.volume= (javax.sound.sampled.FloatControl) this.sdl.getControl(javax.sound.sampled.FloatControl.Type.MASTER_GAIN);
@@ -62,14 +64,13 @@ public class Beep
             }
             catch (Exception v)
             {
-                /*nop*/
+                /*nop*/                                     // too bad, you don't have a volume control, then!
             }
         }
-        
     }
     
     /**
-     * Creates a simple beep object, with volume set at 100 %
+     * Creates a simple beep object, with volume set at 100 %.
      */
     public Beep()
     {
@@ -79,12 +80,12 @@ public class Beep
     /**
      * Sets the sound volume.
      * 
-     * @param percentage the volume, from 0 (no sound) to 100 (loudest).
+     * @param percentage the volume, from 0 (no sound) to 100 (loudest). Anything exceeding the limit will be set to the limit.
      */
     public final void setVolume(int percentage)
     {
         if (this.volume==null)
-            return;
+            return;                                         
         float maxv=this.volume.getMaximum();
         float minv=this.volume.getMinimum();
         float diff=maxv-minv;
@@ -109,8 +110,9 @@ public class Beep
     }
     
     /**
-     * Kills the sound
-     * @param cpu cpu used
+     * Kills the sound.
+     * 
+     * @param cpu cpu used. The SMSQ/E beeping system variable will be set to 0.
      */
     public void killSound(smsqmulator.cpu.MC68000Cpu cpu)
     {
@@ -150,23 +152,22 @@ public class Beep
             return duration;
         duration/=25;
         return duration==0?1:duration;
-      //  return duration*72/1000;
     }
     
     /**
      * Plays the sound.
      * The sound to be played is in the list starting at (A3).
+     * Any BEEP already playing is killed first.
      * 
-     * @param cpu cpu used
+     * @param cpu cpu used.
      */
     public void play(smsqmulator.cpu.MC68000Cpu cpu)
     {
-        
         if (!this.canPlay)
             return;
         killSound(cpu);
         if (this.volume.getValue() == this.volume.getMinimum())
-            return;
+            return;                                         // don't bother playing sound if vol = 0.
         
         int interval=-1,stepInPitch=-1;
         int duration,hiPitch,lowPitch,currentPitch;
@@ -202,10 +203,10 @@ public class Beep
             killSound(cpu);
             return;
         }
-        duration=makeDuration(duration);                    // duration is milliseconds
+        duration=makeDuration(duration);                    // duration is now in milliseconds
         if ((nbrBits&bbits)==0)                             // any step?
         {
-            stepInPitch=(cpu.readMemoryByte(A3++));    // step is always positive for me (!)
+            stepInPitch=(cpu.readMemoryByte(A3++));         // step is always positive for me (!)
             if (nbrOfParams==8)                             // QDOS type sound
                 stepInPitch=(stepInPitch>>>4);
             stepInPitch&=0x0f;
@@ -239,18 +240,13 @@ public class Beep
         double m=Beep.RAD / Beep.SAMPLE_RATE;
         double mVol=127.0*vol;
         int pitch =makePitch(currentPitch);
-        while (i<duration)
+        while (i<duration)                              // now fill in array with the bytes making up the sound
         {
             angle = i * pitch * m;
             soundArray[i] = (byte) (Math.sin(angle) * mVol);
             if (++counter==interval)                    // next interval reached
             {
                 currentPitch+=stepInPitch;              // change pitch at each interval
-           /*     if (currentPitch>hiPitch )
-                    currentPitch=lowPitch;
-                else if(currentPitch<lowPitch)
-                    currentPitch=hiPitch;*/
-
                 if (currentPitch>hiPitch || currentPitch<lowPitch)
                 {
                     stepInPitch*=-1;

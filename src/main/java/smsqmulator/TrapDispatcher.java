@@ -1,11 +1,13 @@
 package smsqmulator;
 
-
 /**
- * This dispatches the various "traps" called from SMSQE to their handlers.
- * This is primarily used for Trap#2 and Trap#3 calls to external device drivers. Each device driver handles the calls to
+ * This dispatches the various "traps" called from SMSQE.
+ * It is the primary interface between SMSQe and java.
+ * This is used for Trap#2 and Trap#3 calls to external device driver. Each device driver handles the calls to
  * itself, and is thus a trap handler.
  * <p>The trap handlers must register with this object for it to know them.
+ * 
+ * There are also a number of additional "traps" for other functionalites.
  * <p>
  * The trap calls are implemented via illegal instructions for the MC68000. These then cause an object of this here class to be called in the CPU's execute() 
  * or executeContinuous() loops (possibly via the javacom instruction).
@@ -22,12 +24,16 @@ package smsqmulator;
  *   <li>   A - reserved</li>
  *   <li>   B - de-iconify only</li>
  *   <li>   C - QL Screen emulation </li>
+ *   <li>   D - Scrap  clipboard operations </li>
  *   <li>   ab00 +   handle some maths ops</li>
 
  * </ul>
  * @author and copyright (c) 2012-2017 Wolfgang Lenerz
  * 
  * @version
+ * 1.22 don't add fileseparator at end of name if it is for win or mem drive ; get/setNamesForDives: if device not found in map (different
+ *      usage name) use getDeviceFromMapValues ; expand scrap operations to include starting/stopping of clipboard monitor thread, all
+ *      scrap ops now in TRAP D ; setDirForDrive : passing a single space is the same as no name at all ; trapC extended to take parameters.
  * 1.21 get drivename (trap5,15) get name even if device has different usage name.
  *      trap 5; case 28,29, 30, 36,37 : interface change, needs smsqe 3.30.0002.
  * 1.20 resetDrives, use map.values directly.
@@ -63,11 +69,11 @@ public class TrapDispatcher
     private final SampledSound sam;                             // sampled sound system for SMSQE's SSS.
     private final Beep beep;                                    // and an object to create SMSQ/E beep sounds.
     private boolean throttleStop=false;                         // do we throttle at all?
-    private ClipBoardXfer cxfer=null;                           // object to transfer text(!!!) to/from the system clipboard to SMSQ/E
+    private ClipboardXfer cxfer=null;                           // object to transfer text(!!!) to/from the system clipboard to SMSQ/E
     private final MonitorGui gui;                               // the GUI with the emulated screen
     private int xLoc,yLoc;                                      // the x,y location of the screen object, in screen coordinates (not coordinates within the gui)
     private java.awt.Robot robot=null;                          // used for moving the mouse about when pointer position is set in SMSQ/E.
-    private SoundDevice sound;                                  // to make sounds
+    private final SoundDevice sound;                            // to make sounds
     private inifile.IniFile inifile;                            // file with init info
     private long currentClock;                                  // used for the QL timer extension
     private long lastTime;                                      // "
@@ -76,10 +82,11 @@ public class TrapDispatcher
     private Arith arithpkg = new Arith();
     private final java.util.HashMap<Integer,DeviceDriver> devicesMap=new java.util.HashMap<>();// devices for I/Oops
     private volatile int schedCounter=0;                        
-    //  private SWinDriver swindrive;
+//    private SWinDriver swindrive;
+    
     
     /**
-     * Creates the object, which is bound to a cpu.
+     * Creates the object.
      * 
      * @param sam a SampledSound object to be used here.
      * @param throt an int, giving (in milliseconds) the time the job will suspend itself when blinking the cursor.
@@ -89,8 +96,8 @@ public class TrapDispatcher
      * @param inifile the ".ini" file object.
      * @param ipHandler handler for (TCP/)IP calls.
      */
-    public TrapDispatcher(SampledSound sam,int throt,MonitorGui mgui,int beepVolume,
-            SoundDevice sound,inifile.IniFile inifile,IPHandler ipHandler)
+    public TrapDispatcher(SampledSound sam,int throt,MonitorGui mgui,int beepVolume, SoundDevice sound,inifile.IniFile inifile,
+                            IPHandler ipHandler)
     {
         this.sam=sam;
         this.beep=new Beep(beepVolume);
@@ -130,7 +137,7 @@ public class TrapDispatcher
         
         switch (trapType)
         {
-              case Types.TRAP3:                                 // handle trap #3 calls for file devices. Only a subset of the trap#3 calls need to be 
+            case Types.TRAP3:                                   // handle trap #3 calls for file devices. Only a subset of the trap#3 calls need to be 
                                                                 // handled, i.e. 0-7 inclusive and $40 to $4f inclusvie
                 if ((trapKey<0) || (trapKey>0x4f) || (trapKey>7 && trapKey<0x40))
                 {
@@ -148,11 +155,11 @@ public class TrapDispatcher
                 }
                 break;
           
-            case Types.TRAP2:                               // file management traps :open/close/delete files, format medium
-                A0=cpu.addr_regs[0];                        // A0 =channel definition block
+            case Types.TRAP2:                                   // file management traps :open/close/delete files, format medium
+                A0=cpu.addr_regs[0];                            // A0 =channel definition block
                 switch (trapKey)
                 {
-                    case 1:                                 // open file
+                    case 1:                                     // open file
                         int namelength=cpu.readMemoryWord(A0+0x32);
                         if (cpu.readMemoryByte(A0+0x33+namelength)==Types.UNDERSCORE)
                             namelength--;
@@ -202,15 +209,14 @@ public class TrapDispatcher
                             dd.formatMedium(s,this.inifile);
                         break;
                         
-                      /*
-                    case 4:                                 // delete a file -this, I think isn't even impemented in SMSQE, it's a trap#3 call
+                    /*
+                    case 4:                                     // delete a file -this, I think isn't even impemented in SMSQE, it's a trap#3 call
                         A1=cpu.getAddrRegisterLong(1); // A0 =physical defn block
                         driveNumber=cpu.readMemoryByte(A1+0x14)-1; // drive number (starts at 1 for drive 1)
                         break;
+                    */
                         
-                        * 
-                        */
-                    default:                                // huh, what's that???????????
+                    default:                                    // huh, what's that???????????
                         cpu.data_regs[0]=Types.ERR_NIMP;
                         Helper.reportError(Localization.Texts[54], Localization.Texts[55]+trapKey, null);
                         break;
@@ -231,11 +237,11 @@ public class TrapDispatcher
                         this.gui.getMonitor().getCPU().setupSMSQE(true); 
                         break;
                         
-                    case 3:                                     // sleep a bit when toggling cursor
+                    case 3:                                     // sleep a bit when toggling cursor, no longer implemented
                         cpu.data_regs[0]=0;     
                         break;  
                         
-                    case 4:                                     // set device pointer d7 = device,d6=drive nbr,a6,a1.l = pointer to name
+                    case 4:                                     // set device/drve pointer d7 = device,d6=drive nbr,a6,a1.l = pointer to name
                         setDirForDrive(cpu.data_regs[7],cpu.data_regs[6]&0xffff,
                         cpu.readSmsqeString(cpu.addr_regs[6]+cpu.addr_regs[1]),cpu,false);
                         break;
@@ -244,8 +250,8 @@ public class TrapDispatcher
                         cpu.setEmuScreenMode(cpu.data_regs[1]&0xff);
                         break;
                        
-                    case 6:
-                        cpu.moveBlock();                        // move a block of (screen?) memory about
+                    case 6:                                     // move a block of (screen?) memory about
+                        cpu.moveBlock();                        
                         break;
                         
                     case 7:                                     // set USE name of a device, A0 points to device defn block
@@ -257,7 +263,7 @@ public class TrapDispatcher
                             if (dd==null)
                             {
                                 cpu.data_regs[0]=Types.ERR_FDNF;
-                                return;                     // OOOPS
+                                return;                         // OOOPS
                             }
                         }
                         dd.setUsage(usage);
@@ -277,7 +283,7 @@ public class TrapDispatcher
                         
                     case 10:       
                         if (this.sam!=null)                     // ssss notify that there is a sound to be played.
-                            this.sam.playSound(cpu);
+                            this.sam.playSample(cpu);
                         break;
                         
                     case 11:                                    // sound queryolume, doesn't work
@@ -299,10 +305,10 @@ public class TrapDispatcher
                         cpu.data_regs[1]=0;
                         break;
                         
-                    case 13:
+                    case 13:                                    // stop beep 
                         this.beep.killSound(cpu);
                         cpu.data_regs[0]=0;
-                        break;                                  // stop beep   
+                        break;                                    
                         
                     case 14:
                         if (this.sam!=null)
@@ -351,18 +357,23 @@ public class TrapDispatcher
                         }
                         break;
                         
-                    case 16:                                    // copy string from clipboard to scrap
-                        if (this.cxfer==null)
-                            this.cxfer=new ClipBoardXfer();     // create object
-                        this.cxfer.transferClipboardContentsToScrap(cpu);//copy string from it.
+                    // old 16,17 moved to trapd    
+                    case 16:                                    // get host os name & version to SMSQE
+                        String p = System.getProperty("os.name")+" "+System.getProperty("os.version");
+                        cpu.writeSmsqeString(cpu.readMemoryLong(cpu.addr_regs[1]+4), p, true, 40);//write string
+                        cpu.data_regs[0]=0;
+                        cpu.reg_sr|=4;
                         break;
                         
-                    case 17:                                    // copy string from scrap to clipboard
-                        if (this.cxfer==null)
-                            this.cxfer=new ClipBoardXfer();     // create object
-                        this.cxfer.transferScrapToClipboard(cpu);//copy string from it.
+                    case 17:                                    // returns 1 if sound is still playing
+                        if (this.sam.isStillPlaying(cpu))
+                            cpu.writeMemoryLong(cpu.readMemoryLong(cpu.addr_regs[1]+4),0x00010001);
+                        else
+                            cpu.writeMemoryLong(cpu.readMemoryLong(cpu.addr_regs[1]+4),0);
+                        cpu.data_regs[0]=0;
+                        cpu.reg_sr |=4;    
                         break;
-                        
+                       
                     case 18:                                    // get time into D1
                         int tx=(int)((System.currentTimeMillis()/1000)+Monitor.TIME_OFFSET); // ** magic offset
                         cpu.data_regs[1]=tx;                    // write the time
@@ -431,7 +442,6 @@ public class TrapDispatcher
                         break;
                         
                     case 30:                                    // get the status of the menu bar
-                        
                         if (this.gui!=null)
                             addr=this.gui.menuBarIsVisible();
                         else
@@ -476,7 +486,7 @@ public class TrapDispatcher
                         noError(cpu);;        
                         break;
                         
-                    default:
+                    default:                                    // oops
                         cpu.data_regs[0]=Types.ERR_NIMP;       
                         break;
                 }
@@ -585,10 +595,13 @@ public class TrapDispatcher
                 }  
                 break;
                 
+                /**
+                 * Handle IP calls.
+                 */
             case Types.TRAP9:                                   // IP OPEN/ALL
                 this.ipHandler.handleTrap(cpu);
                 break;
- /*              
+  /*             
             case Types.TRAPA:                                   // win driver using SMSQ/E code (unused except for tsting purposes)
                 if (this.swindrive == null)
                 {
@@ -613,17 +626,76 @@ public class TrapDispatcher
                     default :
                         break;
                 }
+                if (cpu.data_regs[0]==0)
+                    cpu.reg_sr |=4;
+                else
+                    cpu.reg_sr&=~4;
                 break; 
-   */         
+     */       
+            // contract window to icon or make icon into window again.
             case Types.TRAPB:
-                this.gui.deIconify();
-                noError(cpu);
+                switch (cpu.data_regs[0])
+                {
+                    case 0:                                   
+                        this.gui.deIconify();
+                        noError(cpu);
+                        break;
+                    case 1:
+                        this.gui.iconify();
+                        noError(cpu);
+                        break;
+                }
                 break;
                 
             case Types.TRAPC:                                   // sets whether QL screen should be copied to extended screen.
-                this.gui.getMonitor().setCopyScreen(cpu.data_regs[0]&0xffff,cpu.data_regs[5]);
-                //                                      mode            origins (is ignored) 
+                switch (cpu.data_regs[0])
+                {
+                    case 0 :
+                        this.gui.getMonitor().setCopyScreen(cpu.data_regs[1]&0xffff,cpu.data_regs[5]);
+                        //                                      mode            origins (is ignored) 
+                        break;
+                    case 1:
+                        cpu.data_regs[1]=(cpu instanceof smsqmulator.cpu.CPUforScreenEmulation)?1:0;
+                        break;
+                }
                 break;
+                
+            // SMSQE scrap <-> clipboard interface
+            case Types.TRAPD:
+                switch (cpu.data_regs[0])
+                {
+                    case 0:                                    // copy string from clipboard to scrap
+                        if (this.cxfer==null)
+                            this.cxfer=new ClipboardXfer();     // create object
+                        this.cxfer.transferClipboardContentsToScrap(cpu);//copy string from it.
+                        break;
+                        
+                    case 1:                                    // copy string from scrap to clipboard
+                        if (this.cxfer==null)
+                            this.cxfer=new ClipboardXfer();     // create object
+                        this.cxfer.transferScrapToClipboard(cpu);//copy string from it.
+                        break;
+          
+                    case 2:                                     // query change counter
+                        if (this.cxfer==null)
+                            this.cxfer=new ClipboardXfer();     // create object
+                        this.cxfer.getChangeCounter(cpu);       // on entry d1 = current count, puts result into d0
+                        break;
+                  
+                    case 3:                                     // start monitoring the clipboard
+                        if (this.cxfer==null)
+                            this.cxfer=new ClipboardXfer();     
+                        this.cxfer.startMonitoring();            
+                        break;
+
+                    case 4:                                     // stop monitoring the clipboard
+                        if (this.cxfer==null)
+                            this.cxfer=new ClipboardXfer();     
+                        this.cxfer.stopMonitoring();            
+                        break;
+                }
+                break;
+           
             default:                                            // catch other traps or errors
                 break;
         }   
@@ -642,7 +714,7 @@ public class TrapDispatcher
     }
 
     /**
-     * Show that no erro occurred: set Z flag, set D0 to 0.
+     * Show that no error occurred: set Z flag, set D0 to 0.
      * @param cpu 
      */
     private static void noError(smsqmulator.cpu.MC68000Cpu cpu)
@@ -650,6 +722,7 @@ public class TrapDispatcher
         cpu.data_regs[0]=0;                      
         cpu.reg_sr |=4;
     }
+    
     /**
      * Sets the status of the throttle
      * 
@@ -668,6 +741,7 @@ public class TrapDispatcher
     {
         this.schedCounter=0;
     }
+    
     /**
      * Checks whether the throttle is in effect.
      * 
@@ -723,6 +797,8 @@ public class TrapDispatcher
     public void setNamesForDrives (int deviceID,String[]names,boolean forceRemove)
     {
         DeviceDriver dd = this.devicesMap.get(deviceID);
+        if (dd==null)
+            dd=getDeviceFromMapValues(deviceID);
         if (dd!=null)
         {
            dd.setNames(names,this.inifile,forceRemove,false);
@@ -735,13 +811,6 @@ public class TrapDispatcher
      */
     public void resetDrives()
     {
-    /*    for (java.util.HashMap.Entry<Integer,DeviceDriver> entry : this.devicesMap.entrySet())
-        {
-            DeviceDriver dd=entry.getValue();
-            String[] names=dd.getNames();
-            dd.setNames(names, this.inifile, true,true);
-        }*/
-        
         for (DeviceDriver dd :this.devicesMap.values() )
         {
             String[] names=dd.getNames();
@@ -759,6 +828,8 @@ public class TrapDispatcher
     public String[] getNamesForDrives (int deviceID)
     {
         DeviceDriver dd = this.devicesMap.get(deviceID);
+        if (dd==null)                                           // device not found, probably because usage name is different
+            dd=getDeviceFromMapValues(deviceID);                // try to find it in a slower way 
         return dd==null?null:dd.getNames();
     }
     
@@ -778,10 +849,23 @@ public class TrapDispatcher
             cpu.data_regs[0]=Types.ERR_ITNF;// this device/drive wasn't found
             return;
         }
-        if (newname.endsWith(java.io.File.separator) || newname.isEmpty())
-            names[driveNbr-1]=newname;
-        else 
-            names[driveNbr-1]=newname+java.io.File.separator;
+        if (newname.equals(" "))
+            newname="";
+        switch (deviceDriver)
+        {
+            case Types.WINDriver:
+            case Types.MEMDriver:
+            case Types.FLPDriver:                               // these mustn't have a file separator at end
+                if (newname.endsWith(java.io.File.separator))
+                    newname=newname.substring(0,newname.length());
+                break;
+            default:
+                if (!newname.endsWith(java.io.File.separator))
+                    newname+=java.io.File.separator;            // and these must!
+                
+        }
+        
+        names[driveNbr -1]=newname;
         setNamesForDrives(deviceDriver,names,forceRemoval);
         cpu.data_regs[0]=0;
     }
@@ -877,8 +961,6 @@ public class TrapDispatcher
             this.beep.setVolume(vol);
         if (this.sam!=null)
             this.sam.setVolume(vol);
-        if (this.sound!=null)
-            this.sound.setVolume(vol);
     }
     
     /**
@@ -891,10 +973,11 @@ public class TrapDispatcher
             dd.closeAllFiles();
         resetDrives();
     }
+ 
     /*
     public void setSwin(SWinDriver d)
     {
         this.swindrive=d;
     }
-    */
+ */   
 }

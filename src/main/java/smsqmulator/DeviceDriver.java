@@ -38,6 +38,7 @@ public interface DeviceDriver
      *     If the operation succeeds, the Driver should place a word sized file ID at offset 0x1e of the channel definition block (eg.
      *     <code>this.cpu.writeMemoryWord(channelDefinitionBlock+0x1e, fileID)</code>), or use any other convenient method to make
      *     size it can later identify the file when the file's I/O routines are called.
+     * 
      * @param devDriverLinkageBlock pointer to the SMSQE device driver linkage block (a3).
      * @param channelDefinitionBlock pointer to the SMSQE channel defintion block (a0).
      * @param openType  which kind of open is requested? 
@@ -101,17 +102,16 @@ public interface DeviceDriver
      * @param names an 8 element String array with names for the drives.
      * @param inifile the initialization object.
      * @param forceRemoval true if files/drives should removed before being remounted.
-     * @param suppressWrnings if true, don't show missing drives etc warnings
+     * @param suppressWarnings if true, don't show missing drives etc warning.
      * 
      * @return <code>true</code> if names were set, else <code>false</code>.
      */
-    public boolean setNames(String[]names,inifile.IniFile inifile,boolean forceRemoval,boolean suppressWrnings);
+    public boolean setNames(String[]names,inifile.IniFile inifile,boolean forceRemoval,boolean suppressWarnings);
     
     /**
      * Gets the names of the native directories/files used for each drive of the device.
      * <p> In keeping with standard SMSQE practice, it is presumed throughout that each device may have 8 drives.
      *
-     * 
      * @return An 8 elements string array with the names, or <code>null</code> if the device ID wasn't mine. 
      * Individual elements may be <code>null</code> or empty if the corresponding drive isn't assigned.
      */
@@ -153,13 +153,14 @@ public interface DeviceDriver
      */
     public void setUsage(int usage);
     
+    
     /**
      * This gets the usage name of the device.
-     * 
      * 
      * @return the usage name as an int, or 0 if this wasn't for this device
      */
     public int getUsage();
+    
     
     /**
      * Gets the device ID for this device, eg. SFA0.
@@ -167,6 +168,7 @@ public interface DeviceDriver
      * @return the device ID as int.
      */
     public int getDeviceID();
+    
     
     /**
      * Sets whether a filename's case should be changed (0 = unchanged, 1=all upper case, 2=all lower case.
@@ -180,7 +182,6 @@ public interface DeviceDriver
      * Closes all files opened by all drives of this device driver. 
      */
     public void closeAllFiles();
-    
     
     /**
      * Sets the cpu used by the device driver.
@@ -197,5 +198,4 @@ public interface DeviceDriver
      * 
      */
     public void writeBack (int driveNbr);
-    
 }

@@ -14,6 +14,7 @@ package smsqmulator;
  * 
  * @author and copyright (c) 2012 -2017 Wolfgang Lenerz
  * @version 
+ * 1.06 openFile as directory, use root dir if no part of the file is a dir ; use correct subdir found, if any. .
  * 1.05 openFile don't crash if directory not found.
  * 1.04 openFile better handling of names in chan defn block when opening a directory file
  * 1.03 setNames adjusted ;trying to open a non-existing file returns err.fdnf and not medium is full
@@ -224,19 +225,28 @@ public class XfaDriver implements DeviceDriver
                       fileOpen(driveNumber,file,filename,channelDefinitionBlock,true, true);
                       return true;
                 }
-                // if all else fails, try to buld up filename gradually
-                if (subnames.length==1)
-                    return false;                               // but couldn't
+                // if all else fails, try to build up filename gradually
+//                if (subnames.length==1)
+  //                  return false;                               // but couldn't
                 newName.setLength(0);
                 newName.append(oldName);
                 int current = newName.length();
                 int nml = composeSubdirName(subnames,0,newName);
-                if (nml==current)
-                    return false;
+                if (nml==current)                               // I couldn(t open this at all
+                {
+                    newName.setLength(0);
+                    newName.append(oldName);                    // so use the root dir (!) 
+                }
+                else                                            // "else" added in 1.07
+                    newName.setLength(nml);                     // added in 1.07
                 file=new java.io.File(newName.toString());
                 if (!file.isDirectory())
                     return false;
-                oldName=newName.substring(oldName.length(), nml-1).replace(java.io.File.separator, "_");
+                if (nml==current)
+                    oldName="";                                 // use root dir
+                else
+                    oldName=newName.substring(oldName.length(), nml-1).replace(java.io.File.separator, "_");
+                
                 if (!filename.equals(oldName))
                 {
                     cpu.writeSmsqeString(channelDefinitionBlock+0x32,oldName,-1);
@@ -244,37 +254,6 @@ public class XfaDriver implements DeviceDriver
                 fileOpen(driveNumber,file,oldName,channelDefinitionBlock,true, true);
            
                 return true;
-                /*
-                if (!(file.exists() && file.isDirectory()))
-                {
-                    newName=oldName;
-                    String []subnames=filename.split("_");
-                    int i=0;
-                    file=new java.io.File(newName);
-                    while (file.exists() && file.isDirectory())
-                    {
-                        oldName=newName;
-                        if (i>=subnames.length)
-                            break;
-                        newName+=java.io.File.separator+subnames[i++]; 
-                        file=new java.io.File(newName);
-                    }
-                    file=new java.io.File(oldName);             // if the file we're trying to open is not a dir, use the last dir we could
-                    if (!file.isDirectory())
-                        return false;                            //  if file isn't a dir return not found
-                    if (oldName.equals(this.nativeDir[driveNumber]))
-                       return false;
-                    newName=oldName.substring(this.nativeDir[driveNumber].length()+1).replace(java.io.File.separator, "_");
-                    }
-           //     if (!newName.isEmpty() && !newName.endsWith("_"))
-             //       newName +="_";
-                if (!filename.equals(newName))
-                {
-                    cpu.writeSmsqeString(channelDefinitionBlock+0x32,newName,-1);
-                }
-                fileOpen(driveNumber,file,oldName,channelDefinitionBlock,true, true);
-                */
-             //   break;
                 
             case 255:                                       // delete this file
                 deleteFile(driveNumber,fname,file);
@@ -325,9 +304,6 @@ public class XfaDriver implements DeviceDriver
         }
         return current;
     }
-    
-    
-   
     
 
     /**
@@ -519,7 +495,7 @@ public class XfaDriver implements DeviceDriver
                     java.nio.channels.FileLock fl=null;
                     try
                     {
-                      fl= inoutChannel.tryLock();
+                        fl= inoutChannel.tryLock();
                     }
                     catch (Exception e)
                     {/*NOP*/}                                    // I can't, just ignrore, then.

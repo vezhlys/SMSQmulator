@@ -53,10 +53,6 @@ public class MOVEAnD5 implements InstructionSet
                         {
                             cpu.reg_sr+=8;
                         }
-         /*               
-                        if ((cpu.readMemoryByte(cpu.addr_regs[(opcode>>9)&7]+displacement)&0xff) != s)
-                            s=s;//debug
-                        */
                         
                     }
                     @Override

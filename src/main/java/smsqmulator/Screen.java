@@ -18,6 +18,7 @@ import java.awt.event.KeyEvent;
  * 
  * @author and copyright (c) 2012 -2017 Wolfgang Lenerz
  * @version 
+ *  1.21    diffetent way of handling mousewheel ; setMousewheelAccel created.
  *  1.20    CTRL + mousewheel procudes left/right scroll keycodes.
  *  1.19    CTRl-Shift +a..z produces keys 160+ ; mac : ctrl shift c is not the same as ctrl c.
  *  1.18    totsize variable introduced.
@@ -135,6 +136,7 @@ public abstract class Screen extends javax.swing.JPanel
                 {KeyEvent.VK_SHIFT,         KeyEvent.VK_CONTROL,KeyEvent.VK_ALT,    KeyEvent.VK_X,      KeyEvent.VK_V,  KeyEvent.VK_SLASH,      KeyEvent.VK_N,      KeyEvent.VK_COMMA}};
     
     private int [][] keyrowTable;
+    private int mouseWheelAccel;
     
     /**
      * Creates the object.
@@ -177,6 +179,7 @@ public abstract class Screen extends javax.swing.JPanel
         this.magenta=java.awt.Color.magenta.getRGB();
         this.yellow=java.awt.Color.yellow.getRGB();
         this.orange=java.awt.Color.orange.getRGB();
+        this.mouseWheelAccel = 1;                           // default value
     }
     
     /**
@@ -297,6 +300,29 @@ public abstract class Screen extends javax.swing.JPanel
             public void mouseWheelMoved(java.awt.event.MouseWheelEvent evt) 
             {
                 int count=evt.getWheelRotation();
+                int mschar;
+                if (count==0)
+                    return;
+                if (count<0)
+                {
+                    if (evt.isControlDown())
+                        mschar=0xc10000;
+                    else
+                        mschar=0xd10000;
+                    count=count*-1;
+                }
+                else
+                {
+                    if (evt.isControlDown())
+                        mschar=0xc90000;
+                    else
+                        mschar=0xd90000;
+                }
+                count*=mouseWheelAccel;
+                count--;                                        // prepare for dbf in smsqes
+                monitor.inputMouseWheel(count+mschar);                    // simulate skeystrokes
+                evt.consume();
+             /* int count=evt.getWheelRotation();
                 
                 if (count==0)
                     return;
@@ -315,7 +341,8 @@ public abstract class Screen extends javax.swing.JPanel
                         count=0xd9d9d9;
                 }
                 monitor.inputKey(count);                    // simulate three keystrokes
-                evt.consume();
+                evt.consume();*/
+//                test++;
             }
         });
     }
@@ -441,8 +468,8 @@ public abstract class Screen extends javax.swing.JPanel
         switch (kcode)
         {
             case java.awt.event.KeyEvent.VK_ALT:
-               evt.consume();
-               return; //  
+                evt.consume();
+                return; //  
             case java.awt.event.KeyEvent.VK_ESCAPE:
                 key=27;
                 break;     
@@ -453,57 +480,57 @@ public abstract class Screen extends javax.swing.JPanel
                 key=249;
                 break;                                      // catch the escape key here!
             case java.awt.event.KeyEvent.VK_DOWN:
-               key=0xd8;
-               break;
-           case java.awt.event.KeyEvent.VK_UP:
-               key=0xd0;
-               break;
-           case java.awt.event.KeyEvent.VK_LEFT:
-               key=0xc0;
-               break;
-           case java.awt.event.KeyEvent.VK_RIGHT:
-               key=0xc8;
-               break;
-           case java.awt.event.KeyEvent.VK_F1:
-               key=232;
-               break;
-           case java.awt.event.KeyEvent.VK_F2:
-               key=236;
-               break;
-           case java.awt.event.KeyEvent.VK_F3:
-               key=240;
-               break;
-           case java.awt.event.KeyEvent.VK_F4:
-               key=244;
-               break;
-           case java.awt.event.KeyEvent.VK_F5:
-               key=248;
-               break;
-           case java.awt.event.KeyEvent.VK_F6:
-               key=234;
-               break;
-           case java.awt.event.KeyEvent.VK_F7:
-               key=238;
-               break;
-           case java.awt.event.KeyEvent.VK_F8:
-               key=242;
-               break;
-           case java.awt.event.KeyEvent.VK_F9:
-               key=246;
-               break;
-           case java.awt.event.KeyEvent.VK_F10:
-               key=250;
-               break;
-           case java.awt.event.KeyEvent.VK_F12:
-               key=0x20ff;
-           //    key=-1;
-               break;
-           case java.awt.event.KeyEvent.VK_HOME:
-               key=193;//0xd5
-               break;
+                key=0xd8;
+                break;
+            case java.awt.event.KeyEvent.VK_UP:
+                key=0xd0;
+                break;
+            case java.awt.event.KeyEvent.VK_LEFT:
+                key=0xc0;
+                break;
+            case java.awt.event.KeyEvent.VK_RIGHT:
+                key=0xc8;
+                break;
+            case java.awt.event.KeyEvent.VK_F1:
+                key=232;
+                break;
+            case java.awt.event.KeyEvent.VK_F2:
+                key=236;
+                break;
+            case java.awt.event.KeyEvent.VK_F3:
+                key=240;
+                break;
+            case java.awt.event.KeyEvent.VK_F4:
+                key=244;
+                break;
+            case java.awt.event.KeyEvent.VK_F5:
+                key=248;
+                break;
+            case java.awt.event.KeyEvent.VK_F6:
+                key=234;
+                break;
+            case java.awt.event.KeyEvent.VK_F7:
+                key=238;
+                break;
+            case java.awt.event.KeyEvent.VK_F8:
+                key=242;
+                break;
+            case java.awt.event.KeyEvent.VK_F9:
+                key=246;
+                break;
+            case java.awt.event.KeyEvent.VK_F10:
+                key=250;
+                break;
+            case java.awt.event.KeyEvent.VK_F12:
+                key=0x20ff;
+           //     key=-1;
+                break;
+            case java.awt.event.KeyEvent.VK_HOME:
+                key=193;//0xd5
+                break;
             case java.awt.event.KeyEvent.VK_END:
-               key=201;//0xdd;
-               break;
+                key=201;//0xdd;
+                break;
             case java.awt.event.KeyEvent.VK_PAGE_UP:
                 key=0xd4;//0xd4ff;
                 break;  
@@ -524,7 +551,10 @@ public abstract class Screen extends javax.swing.JPanel
                 if (evt.isShiftDown())
                     key=254;
                 break;
-           default:                                            
+       //     case 130:
+         //       key=94;
+           //     break;
+            default:                                            
                 if (this.isMac &&(evt.isAltDown() || evt.isControlDown()) || evt.isMetaDown()) // mac ALT, CTRL & META keypresses are special
                 {                                           // code contributed by Tobias Fröschle.
                     char c;
@@ -1386,4 +1416,9 @@ public abstract class Screen extends javax.swing.JPanel
             x=0;
         }
     }   
+    
+    public void setMousewheelAccel(int mse)
+    {
+        this.mouseWheelAccel=mse;
+    }
 }

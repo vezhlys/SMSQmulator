@@ -9,15 +9,16 @@ package smsqmulator;
  * tos=top of stack, pointed to by (a1)
  * nos=next on stack, pointed to by 6(a1)
  * 
- * SMSQ/E FPs have a 12 bits exponent, and a 31 bits mantissa + sign bit(bit 31 of the long word is the sign bit).
- * IEEE doubles (64 bits) "only" have an 11 bits exponent, rest is mantissa + sign bit (bit 63), so there might be some s
- * SMSQ/E can handle that IEEE can't : they are handed back to SMSQ/E.
+ * SMSQ/E FPs have a 12 bit exponent, and a 31 bit mantissa + sign bit (bit 31 of the long word is the sign bit).
+ * IEEE doubles (64 bits) "only" have an 11 bit exponent, rest is mantissa + sign bit (bit 63), so there might be some 
+ * FPs that SMSQ/E can handle that IEEE can't : they are handed back to SMSQ/E.
  *  * 
  * THIS CLASS IS NOT THREAD SAFE!!!!!!!!!!!!!!!!!
  * Do not use one same object of this class by different threads concurrently.
  * 
  * @author and copyright (c) Wolfgang Lenerz 2015-2016
  * @version 
+ * 1.09     sometimes we need to round up the result (in double2QlFloat)
  * 1.08     better handling of negative mantissa, -32768 is no longer a special case
  * 1.07     -32768 is treated as NAN and handed back to smsq/e.
  * 1.06     0x7b,0x86a80000 is a special value = 360. I'm sure this is a bug in SMSQ/e somehow (sbext_ext_turtle_asm)
@@ -48,7 +49,6 @@ public class Arith
         cpu.pc_reg=cpu.readMemoryLong(cpu.addr_regs[7])/2;      // set new PC after operation
         cpu.addr_regs[7] += 4;                                  // already do rts
         this.whatOp=whatOp;                                     // keep this for possible error returns
-        
         switch (whatOp)
         {
             case 0 :                                            // addd : d1/d2 + tos -> tos   
@@ -56,7 +56,7 @@ public class Arith
                 double2QlFloat(testVal+qlFloat2Double(cpu),cpu);
                 break;
                 
-            case 1:                                             // add : tos + nos -> nos
+            case 1:                                             // add : tos + nos -> nos 
                 testVal=qlFloat2Double(cpu);                    // tos
                 cpu.addr_regs[1]+=6;                            // A1 is increased by 6 by this op
                 double2QlFloat(testVal+qlFloat2Double(cpu),cpu);// get nos & do op
@@ -125,7 +125,7 @@ public class Arith
                 
             case 9:                                             // muld : D1/D2 * TOS  -> TOS
                 testVal=qlFloat2Double(cpu.data_regs[2]&0xffff, cpu.data_regs[1]);
-                 double2QlFloat(qlFloat2Double(cpu)*testVal,cpu);
+                double2QlFloat(qlFloat2Double(cpu)*testVal,cpu);
                 break;   
                 
             case 10 :                                           // mul : tos*nos -> nos
@@ -158,11 +158,7 @@ public class Arith
             case 16:                                            // tan
                 double2QlFloat(Math.tan(qlFloat2Double(cpu)),cpu);
                 break;
-     /*       
-            case 17:
-                test(cpu);
-                break;
-    */            
+                
             default: 
                 cpu.data_regs[0]=Types.ERR_NIMP;
                 cpu.reg_sr&=~4;                                 // what kind of op was that??????????????????????????!
@@ -181,10 +177,9 @@ public class Arith
     {
         int exponent=cpu.readMemoryWord(cpu.addr_regs[1]);
         int mantissa=cpu.readMemoryLong(cpu.addr_regs[1]+2);   
-        if (exponent==0x7b && mantissa==0x86a80000)//329 1518  7ba6a8
+        if (exponent==0x7b && mantissa==0x86a80000)
             return 360;
         return qlFloat2Double(exponent,mantissa);    
-        //return qlFloat2Double(cpu.readMemoryWord(cpu.addr_regs[1]),cpu.readMemoryLong(cpu.addr_regs[1]+2));
     }
      
     /**
@@ -246,8 +241,8 @@ public class Arith
         int exponent, mantissa;
         if (nbr!=0)
         {
-            mantissa=(int)interm; 
-            interm>>>=32;
+            mantissa=(int)interm;                               // lower long word mantissa
+            interm>>>=32;                                       // higher long word
             exponent=(int)interm;
             boolean neg=exponent<0;
             exponent+=exponent;
@@ -260,12 +255,14 @@ public class Arith
             int temp=exponent;
             exponent>>>=20;
             exponent+=0x402;
-            temp&=0xfffff;
-            temp|=0x100000;
-            temp<<=10;
+            temp&=0xfffff;                                      // bits of the mantissa that were in higher long word lower 20 bits)
+            temp|=0x100000;                                     // 
+            temp<<=10;                                          // move into bits 30 and lower
+            boolean temp1=(mantissa&0x380000)!=0;               // 1.08 do ne need to round up?
             mantissa>>>=22;
             mantissa|=temp;
-           
+            if (temp1)                                          // 1.08 yes, round up
+                mantissa++;
             if (neg)
             {
                 if (mantissa != 0 && (mantissa & (mantissa-1)) == 0)// only one bit set in mantisa?
@@ -274,7 +271,6 @@ public class Arith
                     mantissa|=0x80000000;                           
                     exponent-=1;
                 }
-                
                     mantissa=0-mantissa;
             }
         }        
@@ -296,12 +292,12 @@ public class Arith
      */
     private void errorReturnAfterResult(smsqmulator.cpu.MC68000Cpu cpu)
     {
-        cpu.addr_regs[7]-=4;                                    // undo rts
+        cpu.addr_regs[7]-=4;                                    // undo jump over rts
         switch (this.whatOp)
         {
             case 0 :                                            // addd 
             case 2 :                                            // subd : tos - d1/d2 -> tos
-            case 12 :                                           // square root
+           // case 12 :                                           // square root
                 resetCpu3Regs(cpu,0);
                 break;
                 
@@ -370,6 +366,16 @@ public class Arith
                 cpu.pc_reg =this.oldPC+1;                       // start at where we were    
                 break;
           
+            case 12 :                                           // sqrt - do a move.l 2(a1),d0
+                cpu.pc_reg=this.oldPC+1;                        // pc after that instruction
+                cpu.reg_sr&=0xffe0;                             // all flags 0
+                cpu.data_regs[0]=cpu.readMemoryLong(cpu.addr_regs[1]+2);
+                if (cpu.data_regs[0]==0)
+                    cpu.reg_sr+=4;                              // set Z flag
+                else if(cpu.data_regs[0]<0)
+                    cpu.reg_sr+=8;                              // set N flag
+                break;
+                
             case 13:                                            // cos
             case 14 :                                           // sin
                 resetCpu4Regs(cpu);
@@ -456,22 +462,9 @@ public class Arith
     }
      
     
-    /*
-    private void test(smsqmulator2.cpu.MC68000Cpu cpu)
-    {
-        double testval=qlFloat2Double (cpu);
-        cpu.addr_regs[1]-=6;
-        double2QlFloat(testval,cpu);
-        cpu.pc_reg=this.oldPC;                          // actually do the jsr
-        cpu.addr_regs[7] -= 4;                                  // already do rts
-    }
     
     
-    
-    /*
-    /* ******************************* OLD VERSIONS *********************/
-    
-     /*
+    /* ******************************* OLD VERSIONS *********************
      
     private final static double [] mantVals=new double[32];
     
@@ -584,7 +577,7 @@ public class Arith
     * in IEEE the actual exponent = exponent -1023
     * mantissa is in bits 0-52 (bit counting starts with bit 0)
     * there is an implied 1.0 added to the mantissa
-    * the sign bit is in bit 63 of the long (bit counting starts with bit 0)
+    * the sign bit is in bit 63 of the java long (bit counting starts with bit 0)
     *
     * in ql there is a word for the exponent (nominally 16 bits) and a long word for the mantissa
     * however, values for the exponent only go from 0 to $fff - 12 bits
@@ -592,7 +585,7 @@ public class Arith
     * the sign bit is in bit 31 of the mantissa
     *
     * mantissas : the first significant bit in the mantissa has a value of .5 (1/2), the second 1/4, the third 1/8 etc.
-    * The problem is that the IEEE mantissa is caluclated as 1.0 + (value of mantissa).
+    * The problem is that the IEEE mantissa is calculated as 1.0 + (value of mantissa).
     * whereas the SMSQ/E mantissa is calculated as 0.0 + (value of mantissa). 
     * 1.5 * (2^3)=  .75* (2^4)
     */

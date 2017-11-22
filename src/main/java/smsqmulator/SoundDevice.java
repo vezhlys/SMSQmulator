@@ -4,7 +4,6 @@ package smsqmulator;
  * A SOUND device to play sampled sound according to SMSQ/E's SSS specification.
  * 
  * SMSQmulator's implementation of the SSSS only allows 20Kz stereo. This device allows some other sampling rates.<p>
- * The sound isn"t quite played according to those specs : it's played at 22050 Hz.<p>
  * There are 9 "devices", SOUND1 to SOUND9:
  * <ul>
  *  <li>1 - 20 khz mono (default)</li>
@@ -18,82 +17,37 @@ package smsqmulator;
  *  <li>9 - 40 Khz mono send alternate bytes left/right (crazy stuff)</li>
  * </ul>
  *  "SOUND" defaults to SOUND1.
- * 
- * <p> The advantage of this device over the SmpledSound is that here I know when the sound will stop: this corresponds to the closing of
- * the SMSQ/E channel to the device. I know that after that, no more data will be coming and i can drain the sourcedataline. This gets around
- * the Java bug (see the SampledSopund" class.
  * <p>
  * The sound itself is played via an independent thread.<p>
  * This device only allow ONE channel to be open to it at a time.
  * <p>
- * The actual playback is handled by an independent thread.
+ * The actual playback is handled by an independent thread from the SampledSound device
  * <P>
- * This implements a simplistic buffering scheme.
- * AT each call from SMSQE (send multiple bytes), these bytes are put into an array of type byte. This array is added to an ArrayList. The
- * playback thread gets a element from this ArrayList and writes it into a sourcedataline.
- * @author and copyright (c)Wolfgang Lenerz 2014
+ * @author and copyright (c)Wolfgang Lenerz 2014-2017
  * @version
- *  1.01 implement iob.sbyt, posre, flush and added resampling.
+ *  1.03 revamped, use SampledSound device.
+ *  1.02 add resampling for 22.5 Khz dataline.
+ *  1.01 implement iob.sbyt, posre, flush and added (deice) resampling.
  *  1.00 First build
  * 
  */
 public class SoundDevice
 { 
-    private javax.sound.sampled.SourceDataLine sourceDataLine; 
-    private PlayThread playThread;
-    private javax.sound.sampled.FloatControl volume;            // volume of sound played
     private java.util.ArrayList<byte[]> buffer;                 // buffers for all of the sound to be played.
     private int counter=0;                                      
     private boolean channelClosed=true;                         // is true if "channel" to this device is closed.
-    private int deviceType;                                     // SOND1 to SOUND9
+    private int deviceType;                                     // SUOND1 to SOUND9
     private int av,av1;                                         // used for averages accross calls
-    private double rate;
-    private double adjustFreq;
+    private final SampledSound sam;
    
     /**
      * Creates this object, a DataLine object and an independent thread for filling the DataLine.
      * 
-     * @param volume at what volume sound is played (0...1000)
-     * @param warn warning object
-     * @param cpu the cpu used.
+     * @param sam used for actual playback.
      */
-    public SoundDevice(int volume,Warnings warn,smsqmulator.cpu.MC68000Cpu cpu)
+    public SoundDevice(SampledSound sam)
     {
-        javax.sound.sampled.AudioFormat audioFormat = new javax.sound.sampled.AudioFormat (22050.0F, 8,2,false,false); //8000,11025,16000,22050,44100 -- 8,16 -- 1,2 -- boolean --boolean
-       // javax.sound.sampled.AudioFormat audioFormat = new javax.sound.sampled.AudioFormat (44100.0F, 8,2,false,false); //8000,11025,16000,22050,44100 -- 8,16 -- 1,2 -- boolean --boolean
-        javax.sound.sampled.DataLine.Info dataLineInfo = new javax.sound.sampled.DataLine.Info (javax.sound.sampled.SourceDataLine.class, audioFormat);
-        cpu.data_regs[0]=0;
-        try
-        {   
-            this.sourceDataLine = (javax.sound.sampled.SourceDataLine) javax.sound.sampled.AudioSystem.getLine (dataLineInfo);
-            this.sourceDataLine.open(audioFormat);
-        } 
-        catch (Exception e) 
-        {
-            this.channelClosed=false;                       // this will prevent any activity in this device. 
-            return;
-        }
-        try
-        {
-            this.volume= (javax.sound.sampled.FloatControl) this.sourceDataLine.getControl(javax.sound.sampled.FloatControl.Type.VOLUME);
-            setVolume(volume);
-        }
-        catch (Exception e) 
-        {
-            try
-            {
-                this.volume= (javax.sound.sampled.FloatControl) this.sourceDataLine.getControl(javax.sound.sampled.FloatControl.Type.MASTER_GAIN);
-                setVolume(volume);
-            }
-            catch (Exception v)
-            {
-                if (warn.warnIfSoundProblem)
-                {
-                    Helper.reportError(Localization.Texts[45], Localization.Texts[72]+":\n",null,e);
-                    cpu.data_regs[0]=-1;
-                }
-            }
-        }   
+        this.sam=sam;
     }
     
     /**
@@ -113,8 +67,6 @@ public class SoundDevice
             this.av1=128;
             this.av=128;
             this.channelClosed=false;
-            this.playThread = new PlayThread();
-            this.playThread.start();
             cpu.data_regs[0]=0;                                 // signal open went OK
         }
     }
@@ -152,8 +104,9 @@ public class SoundDevice
                 break;
                 
             case 65:                                            // flush = stop playing
-                if (this.playThread!=null)
-                    this.playThread.stopNow();
+            //    if (this.playThread!=null)
+              //      this.playThread.stopNow();
+                this.sam.killSound(cpu);
                 break;
                 
             case 67:                                            // get position = get sample size
@@ -297,157 +250,9 @@ public class SoundDevice
                 }
                 break;
         }
-      //  this.buffer.add(resample(buff));
-        addToQueue(buff);
+        sam.addChunk(buff);
         cpu.addr_regs[1]=A1;
         cpu.data_regs[1]=nbrOfBytes;
         cpu.data_regs[0]=0;
-    }
-    
-    private synchronized void addToQueue(byte[] buff)
-    {
-        this.buffer.add(buff);
-    }
-    private byte[] resample(byte[]buff)
-    {
-        int l=buff.length;
-        java.util.ArrayList<Byte>ar=new java.util.ArrayList<>(l+l/9);
-        for (int i=0;i<l-1;i+=2)
-        {
-            ar.add(buff[i]);
-            ar.add(buff[i+1]);
-            if (this.adjustFreq<1.0)
-                this.adjustFreq +=this.rate;
-            else
-            {
-                ar.add(buff[i]);
-                ar.add(buff[i+1]);
-                this.adjustFreq-=1.0;
-            }
-        }
-        l=ar.size();
-        byte  []f=new byte[l];
-        for (int i=0;i<l;i++)
-        {
-            f[i]=ar.get(i);
-        }
-        return f;
-    }
-    
-    private synchronized byte[] getFromQueue()
-    {
-        if (this.counter!=0)
-            this.buffer.set(counter-1, null);                   // mem can be garbage collected
-        if (this.counter!=this.buffer.size())
-            return this.buffer.get(counter++);
-        return null;
-    }
-    
-    /**
-     * Sets the sound volume.
-     * 
-     * @param percentage the volume, from 0 (no sound) to 100 (loudest).
-     */
-    public void setVolume(int percentage)
-    {
-        if (this.volume==null)
-            return;
-        float maxv=this.volume.getMaximum();
-        float minv=this.volume.getMinimum();
-        float diff=maxv-minv;
-        if (percentage<0)
-            percentage=0;
-        if (percentage>100)
-            percentage=100;                                 // percentage must be in this limit
-        if (percentage==0)
-        {
-            diff=minv;          
-        }
-        else
-        {
-            diff=diff*((float)percentage/100.0f) + minv;
-        }
-        try
-        {
-            this.volume.setValue(diff);
-        }
-        catch (Exception e)
-        {
-            //NOP//
-        }
-    }
-  
-    
-    /**
-     * Queries the current volume or -1 if line no longer active.
-     * NB contrary to documentation, this doesn't work.
-     * 
-     * @return the volume.
-     */
-    public int queryVolume()
-    {
-        if (this.sourceDataLine!=null && this.sourceDataLine.isRunning())
-        {
-            float vol=this.sourceDataLine.getLevel();
-            if (vol<-1)
-                return 1;
-            else
-                return (int) (vol*25.0);
-        }
-        else
-            return -1;
-    }
-    
-    
-    /**
-     * The independent thread that fills the DataLine.
-     * 
-     * This is a continuous loop which stops when:
-     *   - no data is returned from the getFromQueue call 
-     * AND
-     *      - the channelClosed falg is set to true.
-     */
-    class PlayThread extends Thread
-    {
-        private volatile boolean stopNow=false;
-        
-        @Override
-        @SuppressWarnings("SleepWhileInLoop")
-        public void run()
-        {
-            byte[] buffer;
-            sourceDataLine.start();                             //
-            
-            while(!this.stopNow)                                         // playthread is one continuous loop
-            {
-                try
-                {                        
-                    buffer=getFromQueue();                      // get some more data
-                    if (buffer == null)                         // nothing gotten
-                    {
-                       if (channelClosed)                       // is it because this is the end?
-                       {
-                           sourceDataLine.drain();              // yes, wait till all sound is played
-                           this.stopNow=true;                   // job is done
-                       }
-                       else                                     // noting got, but channel not yet closed
-                           Thread.sleep(50);                    // so wait a little bit.
-                    }
-                    else
-                    {
-                        sourceDataLine.write(buffer,0,buffer.length);// got something, write it.
-                    }
-                }
-                catch (InterruptedException e) 
-                { /*nop*/ }
-            }
-            
-            sourceDataLine.stop();                         // stop soundline
-            sourceDataLine.flush();                        // flush it 
-        }
-        public void stopNow()                                   // signal that sound should be killed now
-        {
-            this.stopNow=true;
-        }
     }
 }

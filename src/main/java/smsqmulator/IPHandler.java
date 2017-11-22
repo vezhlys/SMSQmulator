@@ -12,6 +12,7 @@ package smsqmulator;
  * @author and copyright (c) wolfgang lenerz 2015-2016
  * 
  * @version 
+ * 1.02 handleTrap added case 7.
  * 1.01 interface change for get_netname (case 6), needs at least 3.31.
  * 1.00 implements only SCK and TCP, trap3, 1-7,50,51,53,58,59,5b,5e,62,7b,7c. No UDP.
  * 0.00 initial version, just with trap#3;1-7.
@@ -154,9 +155,6 @@ public class IPHandler
                 else
                 {
                     v=m.getName();
-   //                 String s = m.getRemoteChanName();
-     //               if (!s.isEmpty())
-       //                 v+= " <-> "+s;
                 }
                 
                 int bytes=cpu.data_regs[2]&0xffff;
@@ -182,6 +180,34 @@ public class IPHandler
                     cpu.writeSmsqeString(cpu.readMemoryLong(cpu.addr_regs[1]+4), s, true, l);//write string
                     cpu.data_regs[0]=0;
                 }
+                break;
+                
+            case 7:
+                try
+                {
+                    /*java.net.InetAddress a = java.net.InetAddress.getLocalHost();
+                    s=a.getHostAddress();
+                    byte [] b = a.getAddress();
+                    b=b;
+                    */
+                    s=getLocalAddress();
+                }
+                catch (Exception u)
+                { 
+                    s="";
+                }
+                l=s.length();
+                bufflen=cpu.readMemoryWord(cpu.addr_regs[1]+2);
+                if (l>bufflen)
+                {
+                    cpu.data_regs[0]=Types.ERR_BFFL;
+                }
+                else
+                {   
+                    cpu.writeSmsqeString(cpu.readMemoryLong(cpu.addr_regs[1]+4), s, true, l);//write string
+                    cpu.data_regs[0]=0;
+                }    
+                break;
             }
         
         if (cpu.data_regs[0]==0)
@@ -566,6 +592,39 @@ public class IPHandler
         if (s==null)
             return null;
         return (s.toLowerCase().endsWith(".site") && s.length()>5)?s.substring(0,s.length()-5):s;
+    }
+    
+    
+    /**
+     * Get the local inet v4 address as string, without it being a loopback address.
+     *  
+     * @return 
+     */
+    private static String getLocalAddress() //throws java.net.SocketException
+    {
+        java.util.Enumeration<java.net.NetworkInterface> ifaces;
+        try
+        {
+            ifaces= java.net.NetworkInterface.getNetworkInterfaces();
+        }
+        catch (Exception e)
+        {
+            return "";
+        }
+        while( ifaces.hasMoreElements() )
+        {
+            java.net.NetworkInterface iface = ifaces.nextElement();
+            java.util.Enumeration<java.net.InetAddress> addresses = iface.getInetAddresses();
+            while( addresses.hasMoreElements() )
+            {
+                java.net.InetAddress addr = addresses.nextElement();
+                if( addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress() )
+                {
+                    return addr.getHostAddress();
+                }
+            }
+        }
+        return "";
     }
 }
 /*

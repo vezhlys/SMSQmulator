@@ -6,9 +6,9 @@ package smsqmulator.cpu;
  * 
  * The actual "illegal instructions" that are used are defined as constants in the Types object.
  * 
- * v. 1.01 use Aline instructions for "traps".
+ * v. 1.01 use Aline instructions for "traps" up to TRAPd right now.
  * 
- * @author and copyright (c) 2012 -2015 Wolfgang Lenerz.
+ * @author and copyright (c) 2012 -2017 Wolfgang Lenerz.
  * 
  */
     
@@ -24,7 +24,7 @@ public class JavaComm implements smsqmulator.cpu.InstructionSet
     @Override
     public final void register(final smsqmulator.cpu.MC68000Cpu cpu2)
     {
-        for (int i=0;i<13;i++)
+        for (int i=0;i<14;i++)
         {
             cpu2.addInstruction(this.base+i, new smsqmulator.cpu.Instruction() 
             {

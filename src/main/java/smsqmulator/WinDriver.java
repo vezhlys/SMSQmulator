@@ -136,7 +136,7 @@ public class WinDriver implements DeviceDriver
     public boolean formatMedium(String formatName,inifile.IniFile inifile)
     {
         this.cpu.data_regs[0]=Types.ERR_IPAR;               // preset bad parameter
-        if (formatName.charAt(4)!=Types.UNDERSCORE)         // format must be QXLx_Number or QXLx_Number_Name
+        if (formatName.charAt(4)!=Types.UNDERSCORE)         // format must be WINx_Number or WINx_Number_Name
             return true;  
         int driveNbr=(cpu.data_regs[1]&0xffff)-1;           // get drive number
         int formatSize;

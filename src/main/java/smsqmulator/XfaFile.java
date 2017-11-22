@@ -9,6 +9,7 @@ package smsqmulator;
  * @author and copyright (c) 2012 - 2017 Wolfgang Lenerz.
  * 
  * @version  
+ *   1.11  use NfaFileheader.setAttrs in makeDirBuffer to set some file attributes in SMSQE file header.
  *   1.10  don't show files whose filenames are too long.
  *   1.09  if file is a dir on sfa and file has qemuheader : set correct filelength in dirBuffer ; getExtendedInfo is for all files, not ony dirs..
  *   1.08  getLine,saveFile: return bytes read / sent in D1.L, not only D1.W, trap#3,D0=6 implemented ; setdate modified ; 
@@ -283,7 +284,7 @@ public class XfaFile
                 break;
                 
             case 0x04:  
-                cpu.data_regs[0]=Types.ERR_EOF;   // this doesn't make sense here
+                cpu.data_regs[0]=Types.ERR_EOF;             // this doesn't make sense here
                 break; 
                 
             case 0x05:                                      // send one byte to channel
@@ -325,8 +326,8 @@ public class XfaFile
                 else
                     cpu.writeSmsqeString(A1, "SFA DRIVER",false,-1);
                 cpu.addr_regs[1]=A1+10;
-                cpu.data_regs[1]=0x01001000;      // This is totally fake info!
-                cpu.data_regs[0]=0;               // success.
+                cpu.data_regs[1]=0x01001000;                // This is totally fake info!
+                cpu.data_regs[0]=0;                         // success.
                 break;
                 
             case 0x46:                                      // set file header (mem->file jeader)
@@ -335,7 +336,7 @@ public class XfaFile
                 else
                 {
                     temp=this.header.writeFileHeader(cpu,cpu.addr_regs[1]);
-                    if (temp!=0)                                // all OK
+                    if (temp!=0)                            // all OK
                     {
                         cpu.data_regs[0]=0;
                         cpu.data_regs[1]=(cpu.data_regs[1]&0xffff0000)|temp;        // D1 = number of bytes written
@@ -653,6 +654,7 @@ public class XfaFile
             {
                 cpu.writeMemoryByte(A1, this.dirBuffer.get(this.filePosition));
             }
+           
             cpu.data_regs[1]=D2;
             cpu.addr_regs[1]=A1;
         }
@@ -1076,16 +1078,13 @@ public class XfaFile
         java.nio.channels.FileChannel ioChannel;
         java.io.RandomAccessFile ra;
         String s;
-        int temp;
+        int temp,qemu;
         byte res;
-        int qemu=0;
         for (int i=0;i<this.myFiles.length;i++)
         {
+            qemu=0;
             f=this.myFiles[i];                          // file to treat 
             s=this.myFileNames[i];                      // name of that file
- //               if (s.contains("TODO"))
-   //         f=f;
- 
             switch (this.filenameChange)                // convert it
             {
                 case 0:
@@ -1187,19 +1186,10 @@ public class XfaFile
             this.dirBuffer.putShort(index+0x0e, (short)temp);
             for (int k=0;k<temp;k++)
             {
-             //   res=(byte)Helper.convertToSMSQE(s.substring(k,k+1)); // convert char if need be
-           //     this.dirBuffer.put(index+16+k,res);
-              //  res=Helper.convertToSMSQE(s.charAt(k)); // convert char if need be
                 this.dirBuffer.put(index+16+k,Helper.convertToSMSQE(s.charAt(k)));
             }
             
-            if (f.isDirectory())    
-            {
-            }
-            else if (qemu==0)
-            {
-                this.dirBuffer.putShort(index+4, (short)0); 
-            }
+   //         int attrs;  
             
             if (f.isDirectory())
             {
@@ -1209,6 +1199,8 @@ public class XfaFile
                     temp=(files.length+1)* Types.SMSQEHeaderLength;
                 else
                     temp=0;
+                this.dirBuffer.putInt(index, temp); 
+          //      attrs=2;
             }
             else
             {  
@@ -1220,19 +1212,17 @@ public class XfaFile
                     temp-=qemu;
                     if (temp<0)                             // huh?????
                         temp=0;
-                }
-            }
-            this.dirBuffer.putInt(index, temp);  
-            if (!f.isDirectory())
-            {
+                } 
+                this.dirBuffer.putInt(index, temp);
                 long ttime=f.lastModified();                    // date/time of that file
                 ttime=ttime+this.timeZone.getOffset(ttime);     // adjusted for DST and offset from UTC
                 temp=(int)(ttime/1000)+Types.DATE_OFFSET;       // ** magic adjusted for SMSQE
                 this.dirBuffer.putInt(index+0x34, temp);
                 this.dirBuffer.putInt(index+0x3c, temp); 
-            }
+        //        attrs=0;
+            } 
+            this.dirBuffer.put(index+4,(byte)NfaFileheader.setAttrs(f));// file attributes
             index+=Types.SMSQEHeaderLength;                 //point next entry in dir
-            qemu=0;
         }
     }
     /**

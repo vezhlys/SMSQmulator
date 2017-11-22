@@ -1024,8 +1024,6 @@ public class WinDrive
         {   
             oldcluster=cluster;                             // cluster currently being unlinked
             cluster=this.driveFAT.getShort(cluster*2+WinDrive.QWA_GMAP)&0xffff;// next cluster in list to be unlinked on next run through loop
-            if (cluster==0)
-                cluster=0;
             freeOneCluster(oldcluster);                     // but free current cluster first
             count++;
         } while(cluster!=0);

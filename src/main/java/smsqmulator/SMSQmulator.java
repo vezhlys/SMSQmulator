@@ -4,9 +4,15 @@ import java.io.IOException;
 
 /**
  * The main object, it doesn't do much other than setup and start the monitor.
- * @author and copyright (c) Wolfgang Lenerz 2012-2016.
+ * @author and copyright (c) Wolfgang Lenerz 2012-2017.
  * 
  * @version 
+ * the scheme now is : the smsqe file is set by default to be found in the install dir. This may be overwritten by the ini file.
+ * The inifile is searched for, in this order, in the command line, in the exec dir, in the install dir, in the user's dir.
+ * 
+ * 
+ * 1.23 set new parameter for SoundDevice ; config item MOUSEWHEEL-ACCEL ; new way of handling finding of ini file ; 
+ *      ./ expansion added ; may use command line parameter = entire ini file path.
  * 1.22 new config option to make unlockable qxl.win files read only ; correct window mode settings (when did they get 
  *      changed back?) ; new config entry for action after jva_popup.
  * 1.21 may use CPUforScreenEmulation.
@@ -41,8 +47,8 @@ import java.io.IOException;
 public class SMSQmulator 
 {
     private smsqmulator.cpu.MC68000Cpu cpu;
-    private Screen screen;
-    private String romfile;
+//    private String romFile;
+    private Screen screen;;
 
     /**
      * This creates the main object.
@@ -50,45 +56,86 @@ public class SMSQmulator
      * @param compiledVersion 6,7 or 8  (or 0 if error) - the version for which this was compiled.
      * @param isApplet is this started as an applet?
      * @param appletAsApplication is this an applet started as an application?
-     * @param inifile the ".ini" file object.
+     * @param iniFileName file name for an .ini file.
      */
-    public SMSQmulator(int compiledVersion,boolean isApplet,boolean appletAsApplication,inifile.IniFile inifile)
+    public SMSQmulator(int compiledVersion,boolean isApplet,boolean appletAsApplication,String iniFileName)
     {
-        String bootDir=getBootDir();
-        setLaF();                                               // nicer look and feel
-        if (inifile == null)
-        {
-            inifile=new inifile.IniFile();                      // ini file with options
-            presetOptions (inifile);                            // preset all options to default 
-        }
-        if (!isApplet)
-        {
-            
-            java.io.File inF=new java.io.File(bootDir+java.io.File.separator+"SMSQmulator.ini");
+ //       System.out.println("User dir : " +System.getProperty( "user.home" )+java.io.File.separator);
+   //     System.out.println("Started from "+System.getProperty( "user.dir" )+java.io.File.separator);
+     //   System.out.println("Started from " + java.nio.file.Paths.get("").toAbsolutePath().normalize().toString());    
+       // System.out.println("Command line : "+bootFile); 
+        String appDir = System.getProperty( "user.dir" )+java.io.File.separator; // this is where I was executed from APPDIR
 
-            if (inF.exists())                                   // try to open file from install dir
+        String installDir;                                          // where SMSQmulator is "installed" this is where the SMSQE file is by default (ow=verwritten by the ini file)
+        try
+        { 
+            String path = SMSQmulator.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+            String decodedPath = java.net.URLDecoder.decode(path, "UTF-8");
+            java.io.File file = new java.io.File(decodedPath);
+            installDir = file.getAbsoluteFile().getParent()+java.io.File.separator; // this is where the app is running from (install dir)
+        }
+        catch (Exception e)
+        {
+            installDir = System.getProperty( "user.home" )+java.io.File.separator;
+        }
+
+        String iniDir=null;                                     // this is where I look for the ini file     
+        if (iniFileName!=null && !iniFileName.isEmpty())         // no ini file was passed as parameter
+        {
+            java.io.File bFile = new java.io.File (iniFileName);   // ini file    
+            if (!bFile.exists())
             {
-                inifile.setFilename(bootDir+java.io.File.separator+"SMSQmulator.ini");
+                Helper.reportError("Error", "The ini file '"+iniFileName+"' doesn't exist!", null);
             }
             else
             {
-                inifile.setFilename((System.getProperty( "user.home" )+java.io.File.separator+"SMSQmulator.ini"));
-            }
-            try
-            {
-                inifile.readIniFile();                          // try to read in options from infile
-            }
-            catch (Exception e)                                 // couldn't read inifile, continue using default values & write them
-            { 
-                try
-                {
-                    inifile.addOption("WIN1",bootDir+"SMSQmulator.win","Directory name for WIN1_ drive");
-                    inifile.writeIniFile();
-                }
-                catch (Exception es)
-                {/*nop*/}
+                iniDir= bFile.getAbsoluteFile().getParent()+java.io.File.separator;  // ini directory
+                iniFileName = bFile.getName();                     //ini filename
             }
         }
+       
+        if (iniDir==null)                                       // no ini file was passed as parameter, or it wasn't found
+        {
+            iniDir=appDir;                                      // use appdir
+            iniFileName ="SMSQmulator.ini";
+            java.io.File bFile = new java.io.File (iniDir+iniFileName);
+             if (!bFile.exists())
+                 iniDir=null;
+        }
+        
+        if (iniDir==null)                                       // ini file still wasn't found, use install dir
+        {
+            iniDir=installDir;                                  // use install dir
+            java.io.File bFile = new java.io.File (iniDir+iniFileName);
+             if (!bFile.exists())
+                 iniDir=null;
+        }
+        if (iniDir==null)                                       // ini file still wasn't found, use home dir
+        {
+            iniDir=System.getProperty( "user.home" )+java.io.File.separator;// use home dir
+        }
+        
+        
+        setLaF();                                               // nicer look and feel
+        inifile.IniFile inifile=new inifile.IniFile();          // ini file with options
+        presetOptions (inifile,installDir+"SMSQE");             // preset all options to default 
+        inifile.setFilename(iniDir+iniFileName);
+        try
+        {
+            inifile.readIniFile();                              // try to read in options from infile
+        }
+        catch (Exception e)                                     // couldn't read inifile, continue using default values & write them
+        { 
+            try
+            {                                                   // try to read the ini file
+                inifile.addOption("WIN1",appDir+"SMSQmulator.win","Directory name for WIN1_ drive");
+                inifile.writeIniFile();
+            }
+            catch (Exception es)
+            {/*nop*/}
+        }
+        
+        inifile.addOption("EXPANDED_DIR",iniDir,"./ will be expanded to this - do not modify, will be overwritten!");
         int xsize=inifile.getOptionAsInt("WDW_XSIZE", 512);
         int ysize=inifile.getOptionAsInt("WDW_YSIZE", 256);
         if (xsize<512)
@@ -148,8 +195,10 @@ public class SMSQmulator
         else
             this.cpu = new smsqmulator.cpu.MC68000Cpu(memSize*1024*1024,this.screen,inifile,350000);// create the CPU, set its mem size & screen object
         String m=inifile.getOptionValue("SSSS-FREQUENCY");
-        SampledSound sam =new SampledSound(this.cpu.getMemory(),this.cpu,inifile.getOptionAsInt("SOUND-VOLUME", 50),warnings,m);
-        SoundDevice sound =new SoundDevice(inifile.getOptionAsInt("SOUND-VOLUME", 50),warnings,this.cpu);
+        SampledSound sam =new SampledSound(this.cpu,inifile.getOptionAsInt("SOUND-VOLUME", 50),warnings,m);
+     //   SoundDevice sound =new SoundDevice(inifile.getOptionAsInt("SOUND-VOLUME", 50),warnings,this.cpu,m);
+        SoundDevice sound =new SoundDevice(sam);
+     
         MonitorGui gui=null;
         Monitor moni;
         if (isApplet && !appletAsApplication)
@@ -174,33 +223,15 @@ public class SMSQmulator
             gui.getRegLogger().append("Use the small window below to type your commands.\nType 'h' for help.\n");
         }
         
-        String imageFile=inifile.getOptionValue("ROM_IMAGE_FILE");// any smsqe file configured?...
-        if (imageFile!=null  && !imageFile.isEmpty())
-        { 
-            if (gui!=null)
-                gui.setRomfile(imageFile);                  // ... yes, try to set the rom file
-        }
-        else                                                // ... no, rom file isn't set, try to get the one within the jar file
-        {
-            try
-            {
-                imageFile=bootDir+"SMSQE";
-                if (gui!=null)
-                    gui.setRomfile(imageFile);
-                this.romfile=imageFile;
-                inifile.setOptionValue("ROM_IMAGE_FILE", imageFile);
-                try
-                {
-                   inifile.writeIniFileNoError();
-                }
-                catch (Exception e)
-                { /* nop */}
-            }
-            catch (Exception e)
-            {/*nop*/ }
-        }
         if (gui!=null)
+        {
+            String imageFile=inifile.getOptionValue("ROM_IMAGE_FILE");// any smsqe file configured?...
+            if (imageFile!=null  && !imageFile.isEmpty())
+            { 
+                gui.setRomfile(imageFile);                      // ... yes, try to set the rom file
+            }
             gui.setVisible(true);
+        }
     }
     /*
     public Screen getScreen()
@@ -219,7 +250,7 @@ public class SMSQmulator
      * 
      * @param args the command line arguments - ignored.
      */
-    public static void main(String[] args) 
+    public static void main(final String[] args) 
     {        
         java.awt.EventQueue.invokeLater(new Runnable() 
         {
@@ -245,36 +276,21 @@ public class SMSQmulator
                     catch (IOException e)
                     {/*nop*/}
                 }
-                new SMSQmulator(major,false,false,null);
+                
+/*                String p = System.getProperty("os.name");
+                p=p+" ";
+                p+= System.getProperty("os.version");
+                p=p+ " ";
+                p+= System.getProperty("os.arch");
+                p=p+".";
+                String m =p;
+                */
+                if (args.length!=0)
+                    new SMSQmulator(major,false,false,args[0]);
+                else
+                    new SMSQmulator(major,false,false,null);
             }
         });
-    }
-    
-    /**
-     * Gets the directory from which this was "booted", i.e. from which the emulator was launched.
-     * 
-     * @return the string with that directory.
-     */
-    private String getBootDir()
-    {
-        String imageFile="";
-        try
-        {
-            imageFile = SMSQmulator.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-            imageFile = java.net.URLDecoder.decode(imageFile, "UTF-8");// this gets the name of the jar file itself
-            if (imageFile.toLowerCase().endsWith("jar"))// possibly get rid of the name of the jar file
-            {   try
-                {
-                    imageFile=imageFile.replace("/", java.io.File.separator);
-                    imageFile=imageFile.substring(0,imageFile.lastIndexOf(java.io.File.separator)+1);
-                }
-                catch (Exception e)
-                { /*nop*/}
-            }
-        }
-        catch (Exception e)
-        { /*nop*/}
-        return imageFile;
     }
             
     /**
@@ -282,7 +298,7 @@ public class SMSQmulator
      * 
      * @param inifile the inifile with the options to be set.
      */
-    public final static void presetOptions( inifile.IniFile inifile)
+    public final static void presetOptions( inifile.IniFile inifile, String romImage)
     {
         String[] options = {"NFA1","","Directory name for NFA1_ drive","NFA2","","","NFA3","","","NFA4","","","NFA5","","","NFA6","","","NFA7","","","NFA8","","","NFA_USE","","",
                             "SFA1","","Directory name for SFA1_ drive","SFA2","","","SFA3","","","SFA4","","","SFA5","","","SFA6","","","SFA7","","","SFA8","","","SFA_USE","","",
@@ -292,7 +308,8 @@ public class SMSQmulator
                             "DISABLE-WIN-DEVICE","0","Disable the WIN device (0 = no, 1 = yes)","DISABLE-NFA-DEVICE","0","Disable the NFA device (0 = no, 1 = yes)",
                             "DISABLE-SFA-DEVICE","0","Disable the SFA device (0 = no, 1 = yes)","DISABLE-FLP-DEVICE","0","Disable the FLP device (0 = no, 1 = yes)",
                             "DISABLE-MEM-DEVICE","1","Disable the MEM device (0 = no, 1 = yes)",
-                            "WDW_XSIZE","512","X size of window: min size = 512","WDW_YSIZE","256","Y size of window: min size = 256","ROM_IMAGE_FILE","","File containing the SMSQE code",
+                            "WDW_XSIZE","512","X size of window: min size = 512","WDW_YSIZE","256","Y size of window: min size = 256",
+                            "ROM_IMAGE_FILE","","File containing the SMSQE code",
                             "NFA-FILENAME-CHANGE","","Change case of files on NFA devices (0: no change 1:upper case 2:lower case)",
                             "SFA-FILENAME-CHANGE","","Change case of file names on SFA devices (0: no change 1:upper case 2:lower case)",
                             "MEM_SIZE","8","Size of memory in MiB","SCREEN-MODE","3","Screen colour mode (0 = QL mode, 2 = Aurora 8 bit colour mode, 3 = 16 bit colour mode)",
@@ -315,11 +332,14 @@ public class SMSQmulator
                             "SSSS-FREQUENCY","22.05","SSSS frequency in Khz, allowed are 20 and 22.05 only, default 22.05",
                             "MAKE-UNLOCKABLE-QXLWIN-READONLY","0","When ignoring file lock errors, make an unlockable file read only",
                             "POPUP-ACTION","1","Action after JVA_POPUP : 0 = open wdw, 1 = blink taskbar entry",
+                            "MOUSEWHEEL-ACCEL","1","Speed of mouse scroll wheel (1 - 9 = normal to fast)",
+                            "EXPANDED_DIR","","./ will be expanded to this - do not modify, will be overwritten!"
                             };
         for (int i=0;i<options.length;i+=3)
         {
             inifile.addOption(options[i+0], options[i+1],options[i+2]);
         }
+        inifile.addOption("ROM_IMAGE_FILE",romImage,"File containing the SMSQE code");
     }
          
     /**

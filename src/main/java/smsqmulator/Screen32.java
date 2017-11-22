@@ -3,8 +3,9 @@ package smsqmulator;
 /**
  * This is the screen object for a "mode 32" screen, where each pixels is a word in GGGBBBBB RRRRRGGG format.
  *
- * @author and copyright (c) 2012 -2016 Wolfgang Lenerz
+ * @author and copyright (c) 2012 -2017 Wolfgang Lenerz
  * @version 
+ *  1.14 getColoursFromStipple correctly for horizontal stripes.
  *  1.14 fillBlock and xorBlock totally rewritten, they are called from TrapDispatcher,not the cpu ; writeWord and writeLonbg 
  *       slightly improved ; readXXXXFromScreen and alphaBlock removed ; copyScreen moved to Screen object ; cleaned up makeClutColours.
  *  1.13 copyScreen implemented, fillBlock and xorBlock revamped.
@@ -156,6 +157,7 @@ public class Screen32 extends Screen
             case 1:                                             // horizontal stripes
                 colours[0]=(stippleC<<16)| stippleC;  
                 colours[1]=(mainC<<16)| mainC;
+                break;
             case 3:                                             // checkerboard
                 colours[0]=(mainC<<16)| stippleC;               // swap d6
                 break;

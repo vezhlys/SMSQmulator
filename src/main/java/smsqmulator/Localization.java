@@ -2,6 +2,7 @@ package smsqmulator;
 
 /**
  * This is the localization class, which contains strings in different languages.
+ * 
  * @author and copyright (C) Wolfgang Lenerz 2008-2017.
  * 
  * @version
@@ -16,15 +17,15 @@ public class Localization
     /**
     * The language strings
     */
-    public static final String []Texts = new String [150] ; // the language strings
-    private static final int [] language=new int[1];                                   // what language we're using
+    public static final String []Texts = new String [160] ; // the language strings
+    private static final int [] language=new int[1];        // what language we're using
                                                             // 1 = german   Deutsch
                                                             // 2 = english  English
                                                             // 3 = spanish  Espanol
                                                             // 4 = french   Français
     // also change ql version !!!!!!                        // 5 = italian  Italiano
-    private static final String version="2.24";             // ß = altgr s
-    private final static int QLversion=0x322e3234;          // 0x322e3231 ß = 0x329c3231
+    private static final String version="2.25";             // ß = altgr s
+    private final static int QLversion=0x322e3235;          // 0x322e3231 ß = 0x329c3231
     
     
     /**
@@ -87,12 +88,13 @@ public class Localization
     /**
      * Gets the current version of SMSQmulator.
      * 
-     * @return the version as a 4 letter string "x.yy"
+     * @return the version as an int (each byte = 1 char).
      */
     public final static int getQLVersion()
     {
         return QLversion;
     }
+    
     /**
      * Gets the current version of SMSQmulator.
      * 
@@ -102,6 +104,7 @@ public class Localization
     {
         return version;
     }
+    
     /**
      * This sets the language and the language dependent texts.
      * 
@@ -113,6 +116,7 @@ public class Localization
      *  <li>4 --FR  
      *  <li>5 --IT     
      * </ul>
+     * Parameters outside this range are simply ignored, nothing is then changed.
      */
     public static final void setLanguage(int mlanguage)
     {
@@ -272,6 +276,11 @@ public class Localization
                 Texts[145]="Aktion nach JVA_POPUP";
                 Texts[146]="Fenster wieder öffnen";
                 Texts[147]="Taskleisteneintrag blinken";
+                Texts[148]="Mausradbeschleuningungsfaktor";
+                Texts[149]="Die ini Datei '";
+                Texts[150]="' existiert nicht!";
+                Texts[151]="\"./\" wird umgewandelt in ";
+                
                 break;
                 
             case 2:                                         // english   
@@ -421,6 +430,10 @@ public class Localization
                 Texts[145]="Action for JVA_POPUP event";
                 Texts[146]="Re-open window";
                 Texts[147]="Blink taskbar entry";
+                Texts[148]="Mouse wheel acceleration factor";
+                Texts[149]="The ini file '";
+                Texts[150]="' doesn't exist!";
+                Texts[151]="\"./\" will be expanded to ";
                 break;
                 
             case 3:                                         // spanish  úéñ¡¿óááÁéÉíÍóÓúÚñÑ¡¿
@@ -570,6 +583,10 @@ public class Localization
                 Texts[145]="¿Qué hacer tras un JVA_POPUP?";
                 Texts[146]="Reabrir la ventana";
                 Texts[147]="Parpadear la entrada en la barra de tareas";
+                Texts[148]="Acceleración de la rueda del ratón";
+                Texts[149]="¡El archivo ini '";
+                Texts[150]="' no existe!";
+                Texts[151]="\"./\" se transformará en ";
                 break;
                  
             case 4:                                         // french   
@@ -719,6 +736,10 @@ public class Localization
                 Texts[145]="Action après un JVA_POPUP?";
                 Texts[146]="Rouvrir la fenêtre";
                 Texts[147]="Faire clignoter l'entrée dans la barre de tâches";
+                Texts[148]="Facteur d'accélération de la roue de la souris ";
+                Texts[149]="Le fichier ini \"";
+                Texts[150]="\" n'existe pas!";
+                Texts[151]="\"./\" sera transformé en ";
                 break; 
                 
               case 5:                                         // italian   
@@ -868,6 +889,10 @@ public class Localization
                 Texts[145]="Azione dopo un JVA_POPUP";
                 Texts[146]="Riaprire la finestra";
                 Texts[147]="Lampeggiare la voce nelle barra delle applicazioni";
+                Texts[148]="Mouse wheel acceleration factor";
+                Texts[149]="Il file ini '";
+                Texts[150]="' non existe!";
+                Texts[151]="\"./\" sera transformato in ";
                 
                 break;       
         }

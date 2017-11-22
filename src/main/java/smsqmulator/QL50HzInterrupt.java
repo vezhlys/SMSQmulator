@@ -81,12 +81,16 @@ public class QL50HzInterrupt implements ExternalInterruptHandler
         if (this.iThread!=null)
             this.iThread.stopit();                          // let the interrupt thread die if there is any running (there shouldn't be)
         this.iThread=null;
-        this.iThread=new InterruptThread(this.cpu);         // set up new interrupt thread    
-      
+        this.iThread=new InterruptThread(this.cpu);         // set up new interrupt thread      
+        this.iThread.setName("50 Hz Interrupt");
+        this.iThread.setDaemon(true);
+        
         if (this.sThread!=null)
             this.sThread.stopit();
         this.sThread=null;
         this.sThread=new ScreenThread(this.screen);
+        this.sThread.setName("Screen updater");
+        this.sThread.setDaemon(true);
         
         this.iThread.start();
         this.sThread.start();

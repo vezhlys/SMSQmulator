@@ -1,23 +1,44 @@
 package smsqmulator;
 
+
 /**
  * An object to make some sampled sound according to SMSQ/E's SSSS specification.
+ * That takes 20 kHz sound, stereo, one byte for each channel.
+ * <p>
+ * Bytes are sent to this by "chunks". Each chunk represents a certain number of bytes corresponding to samples
+ * that are added to the SSSS. There is a minimum of 2 bytes per chunk (one left, one right) if a single 
+ * sample is added, and a maximum of (SMSQE SSSS buffer size) bytes if multiple bytes are added to the SSSS.<p>
  * 
- * This creates a buffer (a 100K byte array). SMSQ/E's SSSS queue is emptied into this here buffer and then fed to a SourceDataLine
- * for playback via an independent <code> PlayThread</code> thread. This thread is created once and, when it has nothing to do (no sound is to be played)
- * it will just go to sleep. A new thread is NOT created every time a sound is to be played.<p>
+ * Internally, each chunk is repreented here by an array of bytes. This object creates a very primitive 
+ * FIFO buffering. This is a achived via a simple ArrayList of byte[]. If a sample is added to the SSSS, the
+ * byte array corresponding to that chunk is added to the end of the ArrayList, and upon playback the first 
+ * element of the ArrayList is played and removed from the list. 
  * 
- * The only soundfile allowed are 20KHz ".UB" files.
- * 
- * The general contract with the SMSQ/E's ssss is that whenever a sampled is to be sent to the ssss, smsq gets here via the corresponding
- * trap (playsound). Then the independent job is started which copies the data from the SMSQE buffer to the buffer set up here.
+ * (There is an inefficiency in this since each time element 0 is removed f0orm the ArrayList, all other elements
+ * are shuffled down. I'm not sure, however, whether this really merits that I implement a real FIFO queue).
+ * <p>
+ * Playback is via an independent <code> PlayThread</code> thread. This thread is created once and, when it
+ * has nothing to do (no sound is to be played) it will just go to sleep. A new thread is NOT created every 
+ * time a sound is to be played. The thread feeds data to a SourceDataLine set up here.
+ * <p>
+ * The general contract with the SMSQE's SSSS is that whenever a sample is sent to it, SMSQE gets here via the 
+ * corresponding trap (playsound) and the corresponding chunk is taken from SMSQE's memory and added to the arrayList.
+ * Then the independent thread is started or woken, which copies each chunk from this ArrayList to the SourceDataline
+ * buffer set up here.
  * <p>
  * There is a bug in the java SourceDataLine : if one repeatedly sends it small sound samples, the sound is repeated indefintely (in total or in part)
- * until the dataline is closed/stopped. To try to get around this, a special flag may be set that tells this, a new vector is introduced into the SSSS in SMSQ/E, that 
+ * until the dataline is closed/stopped. To try to get around this, a special flag may be set that tells that the sound 
+ * should be stopped if the SSSS is empty, a new vector is introduced into the SSSS in SMSQ/E, that 
  * will cause the PlayThread to empty and STOP the SoundDataLine once the queue is empty.
  * <p>
- * @author and copyright (c)Wolfgang Lenerz 2012-2016
+ * This also handles resampling. The only sound format allowed for the SSSS is 20kHz stereo sound. Some SourceDataLines
+ * cannot handle that format (especially under OpenJDK). Hi=owever,a pparently all will handle 22.1 kHz (halve the CD 
+ * rate), I reasmple the sound in that case.
+ * 
+ * <p>
+ * @author and copyright (c)Wolfgang Lenerz 2012-2017
  * @version
+ *  1.05    interface SMSQE <-> this objet totally revamped, uses a primitiv buffering system..
  *  1.04    resampling if 22.05 Khz is chosen, thanks to Marcel Kilgus for the algorithm.
  *  1.03    minor modification in queueIsEmpty
  *  1.02    better handling of killsound, faster killsound by limiting the sample size in getFromQueue, frequency in object creation.
@@ -25,43 +46,30 @@ package smsqmulator;
  *  1.00    setVolume implemented
  *  0.01    implemented queue is empty, close sound, query sound : try to get around Java bug of repeating sounds.
  *  0.00    first build
- * 
  */
 public class SampledSound 
 { 
-    private byte[] audioData=new byte[10];
-    private javax.sound.sampled.SourceDataLine sourceDataLine=null;
-    private PlayThread playThread;
-    private static final int MAX_BUFF_LEN=100*1024;
-    private int base;                                           // base of SSSS memory structure    
-    private final int qstart=0x10;                              // some indexes into the memory structure : start of queue
-    private final int qin=qstart+4;                             // ptr to location for next byte to put into queue
-    private final int qout=qin+4;                               // ptr to location to get next byte from
-    private final int qend=qout+4;                              // ptr to end of queue
-    private final int qbase=qend+4;                             // ptr to base of queue   
-    private int start;                                          // start address of queue in my memory block adjusted for word access
-    private int last;                                           // same for end address of queue
-    private int qoutPtr;                                        // location to get next byte from adjusted for word access
-    private final byte[] myBuffer=new byte[SampledSound.MAX_BUFF_LEN];
-    private short[] memory;                                     // this is the cpu's memory, for direct access to it - this should only be read here, except for the queue out pointer.
-    private int nextOut;                                        // where to get the next data from in SMSQ/E's queue
+    private javax.sound.sampled.SourceDataLine sourceDataLine;  // this produces the sound
+    private PlayThread playThread;                              // the thread feeding the data to the SourcedataLine
+    private final java.util.ArrayList<byte[]> queue = new java.util.ArrayList<byte[]>();// primitive FIFO queue
     private boolean stopSound=false;                            // Signals that once queue is empty sound should be killed
     private javax.sound.sampled.FloatControl volume;            // volume of sound played
-    private volatile boolean isAsleep=false;
-    private boolean reSample=false;
-    private double rate;
-    private double adjustFreq;
+    private volatile boolean isAsleep=false;                    // is true if playThread is asleep
+    private boolean reSample=false;                             // is true of sond needs to be resampled from
+    private final static double RATE=(double)((double)(2050)/(double)22050); // resampling rate
+    private double adjustFreq;                                  // shows when to add a sample
+    private int start;                                          // start of SMSQE SSSS buffer 
+    private int end;                                            // end of SMSQE SSSS buffer 
     
     /**
      * Creates this object, a DataLine object and an independent thread for filling the DataLine.
      * 
      * @param cpu the cpu.
-     * @param DMAAccess : the cpu's memory, for direct access to it.
      * @param volume the volume the sound is to have : 0 -100.
      * @param warn a flag, if <code> true</code>, warn if sound problems may arise in the future.
      * @param frequency either "22.05" or "20" (any other value will be set to 22.05) : frequency in KHz.
      */
-    public SampledSound(short []DMAAccess,smsqmulator.cpu.MC68000Cpu cpu,int volume,Warnings warn,String frequency)
+    public SampledSound(smsqmulator.cpu.MC68000Cpu cpu,int volume,Warnings warn,String frequency)
     {
         javax.sound.sampled.AudioFormat audioFormat;
         if (frequency!=null && frequency.equals("20"))
@@ -69,36 +77,36 @@ public class SampledSound
         else
         {
             this.reSample=true;
-            this.rate=(double)((double)(2050)/(double)22050);
             audioFormat = new javax.sound.sampled.AudioFormat (22050.0F, 8,2,false,false); //8000,11025,16000,22050,44100 -- 8,16 -- 1,2 -- boolean --boolean
         }
-        this.memory=DMAAccess;
-        cpu.data_regs[0]=0;
         javax.sound.sampled.DataLine.Info dataLineInfo = new javax.sound.sampled.DataLine.Info (javax.sound.sampled.SourceDataLine.class, audioFormat);
         try
         {   
             this.sourceDataLine = (javax.sound.sampled.SourceDataLine) javax.sound.sampled.AudioSystem.getLine (dataLineInfo);
-            this.sourceDataLine.open(audioFormat);
-            this.playThread = new PlayThread();
+            this.sourceDataLine.open(audioFormat);              // open dataline
+            this.playThread = new PlayThread();                 // now create the thread 
+            this.playThread.setName("SampledSound play thread");
+            this.playThread.setDaemon(true);
             this.playThread.start();
         } 
-        catch (Exception e) 
+        catch (javax.sound.sampled.LineUnavailableException e) 
         {
             if (warn.warnIfSoundProblem)
             {
                 Helper.reportError(Localization.Texts[45], Localization.Texts[72]+":\n",null,e);
                 cpu.data_regs[0]=-1;
             }
+            this.sourceDataLine =null;
             return;
         }
-        try
+        try                                                     // try to set volume via volume control
         {
             this.volume= (javax.sound.sampled.FloatControl) this.sourceDataLine.getControl(javax.sound.sampled.FloatControl.Type.VOLUME);
             setVolume(volume);
         }
         catch (Exception e) 
         {
-            try
+            try                                                 //..0 if that deosn't work try to set volume via mster gain
             {
                 this.volume= (javax.sound.sampled.FloatControl) this.sourceDataLine.getControl(javax.sound.sampled.FloatControl.Type.MASTER_GAIN);
                 setVolume(volume);
@@ -115,9 +123,8 @@ public class SampledSound
     }
      
     /**
-     * Fill in the pointers to the data area for this sampled sound.
+     * Fill in the pointers to the SSSS buffer.
      * Called during SMSQ/E initialization of the SSSS.
-     * A0 points to memory for queue.
      * 
      * @param cpu the smsqmulator.cpu.MC68000Cpu used.
      */
@@ -125,112 +132,40 @@ public class SampledSound
     {
         if (this.sourceDataLine==null)
             return;
-        if (this.sourceDataLine!=null)
-            this.sourceDataLine.flush();
-        this.memory=cpu.getMemory();
-        this.base=cpu.addr_regs[0]-8;                       // base address of queue memory block
-        this.last=cpu.readMemoryLong(this.qend+this.base) /2; // end address of queue, adjusted for word sized access  
-        this.start=(this.qbase+this.base)/2;                // start address of queue in my memory block adjusted for word access
-        this.nextOut=this.start;                            // at the beginning, next byte out is at start of queue
-        this.qoutPtr=(this.base+this.qout)/2;               // where our out pointer lies
-        cpu.data_regs[0]=0;                                 // all OK
+        this.sourceDataLine.flush();
+        this.start=cpu.addr_regs[2];                            // start of bytes
+        this.end=cpu.addr_regs[1];                              // end of bytes
+        cpu.data_regs[0]=0;                                     // all OK
     }
     
     /**
-     * Sets the memory used by the cpu.
+     * Gets the next chunk to be played.
      * 
-     * @param memory the memory (array of short) to set.
-     */
-    public synchronized void setMemory(short [] memory)
-    {
-        this.base=0;
-        this.memory=memory;
-    } 
-  
-    /**
-     * Copies the sound data from the SMSQE queue into my (empty!) buffer.
+     * This is called from the PlayThread.
      * 
-     * @return the number of bytes got.
+     * @return the chunk to tbe played or null if there is none.
      */
-    private int getFromQueue()
+    private byte[] getFromQueue()
     {
-   /*      FOR TESTING POURPOSES ONLY
-        if (this.base==0 || this.memory==null)              //huh? these are not initialized, can't do anything!
-            return 0;
-        int m = alternateGet();
-        if (m>-1)
-            return m;
-        
-     */   
-        int first=((this.memory[(this.qin+this.base)/2]<<16)+(this.memory[(this.qin+this.base+2)/2]&0xffff))/2; // this is where next element to insert goes= end of my output queue
-        // there is a small RISK here : it is conceivable that the "first" address is corrupted if SMSQE modifies the queue-in pointer whilst the
-        // playthread thread tries to get it. Hence the next test:
-        if (first > this.last || first <this.start)
-            return 0;
-        if (this.nextOut==first)
-            return 0;                                       // can't get anything, queue is empty
-        int content=0;
-    //    while (this.nextOut!=first &&  content< SampledSound.MAX_BUFF_LEN)
-        while (this.nextOut!=first &&  content< 10000)
-        {
-            this.myBuffer[content++]=(byte)((this.memory[this.nextOut]>>>8));// get data for left channel
-            this.myBuffer[content++]=(byte)(this.memory[this.nextOut++]&0xff);// get data for right channel
-            if (this.nextOut==this.last)
-                this.nextOut=this.start;                    // restart at the beginning
-            if (this.reSample)                              // possibly resample
-            {
-                 if (this.adjustFreq<1.0)
-                     this.adjustFreq +=this.rate;
-                 else
-                 {
-                      this.myBuffer[content]= this.myBuffer[content-2];
-                      content++;  
-                      this.myBuffer[content]= this.myBuffer[content-2];
-                      content++;
-                      this.adjustFreq-=1.0;
-                 }
-            }
+        if (this.queue.isEmpty())  
+            return null;
+        byte []temp;
+        synchronized(this.queue)
+        { 
+            temp= this.queue.get(0);                            // get the first chunk (FIFO)
+            this.queue.remove(0);                               // remove it from "queue"
         }
-        this.memory[this.qoutPtr]=(short)((this.nextOut*2)>>>16);// set upper word of address
-        this.memory[this.qoutPtr+1]=(short)((this.nextOut*2)&0xffff);// set lower word of address
-        
-        return content;   
-    }
-    
-    /** Alternative, unused, keep for testing purposes only -*
-    private int alternateGet()
-    {
-        int base=0xd000/2;
-        int count = this.memory[base]&0xffff;
-        base++;
-        for (int i=0;i<count;i++)
-        {
-            int m = this.memory[base+i]&0xffff;
-            m=~m;
-            this.myBuffer[i*2]=(byte)((m>>>8));// get data for left channel
-            this.myBuffer[i*2+1]=(byte)(m&0xff);// get data for right channel
-        }
-        if (count!=0)
-            count=count;
-        this.memory[--base]=0;
-        return count*2;
+        return temp;
     }
     
     /**
-     * Checks whether the sound queue currently seems to be empty.
+     * Checks whether the chunk queue currently seems to be empty.
      * 
      * @return <code>true</code> if current sound queue seems to be empty.
      */
     private boolean queueIsEmpty()
     {
-        if (this.base==0 || this.memory==null)              //huh? these are not initialized, can't do anything!
-            return true;
-        int first=((this.memory[(this.qin+this.base)/2]<<16)+(this.memory[(this.qin+this.base+2)/2]&0xffff))/2; // this is where next element to insert goes= end of my output queu
-        // there is a small RISK here : it is conceivable that the "first" address is corrupted if SMSQE modifies the queue in pointer whilst the
-        // playthread thread tries to get it. Hence the next test:
-        if (first > this.last || first <this.start)
-            return true;
-        return this.nextOut==first;
+       return this.queue.isEmpty();
     }
   
     /**
@@ -242,7 +177,6 @@ public class SampledSound
     {
         if (this.volume==null)
             return;
-            
         float maxv=this.volume.getMaximum();
         float minv=this.volume.getMinimum();
         float diff=maxv-minv;
@@ -268,46 +202,183 @@ public class SampledSound
         }
     }
     
-    
     /**
      * Tries to kill the currently played sound.
+     * 
+     * This is called from the emulation thread.
      * 
      * @param cpu the smsqmulator.cpu.MC68000Cpu used.
      */
     public void killSound(smsqmulator.cpu.MC68000Cpu cpu)
     {
-     //   if (this.sourceDataLine!=null)
-       //     this.sourceDataLine.flush();
         if (this.playThread!=null)
-            this.playThread.stopNow();
-        cpu.data_regs[0]=0;
+            this.playThread.stopNow();                          // stop playing
+        synchronized(this.queue)
+        {
+            this.queue.clear();                                 // and empty queue
+        }
+        cpu.data_regs[0]=0;                                     // signal no error
     }
      
     /**
-     * Wakes up the Sound job, if need be.
-     * This is done by interrupting it.
+     * This adds a chunk from the SSSS and plays it. It wakes up the PlayThread, if need be (by interrupting it).
+     * A1 points to the end of the queue.
+     * 
+     * This is called from the emulation thread.
      * 
      * @param cpu the cpu used.
      */
-    public void playSound(smsqmulator.cpu.MC68000Cpu cpu)
+    public void playSample(smsqmulator.cpu.MC68000Cpu cpu)
     {
+        cpu.data_regs[0]=0;
         if (this.sourceDataLine!=null)
         {
-            closeSound(false);
             if (this.volume.getValue() == this.volume.getMinimum())
-                return;
+                return;                                         // no sound is being hearde anyway
             if (this.playThread!=null)
+            {
                 if (this.isAsleep)
                     this.playThread.interrupt();
+                byte[]buff=resample(cpu);
+                if (buff!=null)
+                {
+                    synchronized(this.queue)
+                    {
+                        this.queue.add(buff);
+                    }
+                }
+            }
         }
-        cpu.data_regs[0]=0;
     }
     
     /**
-     * Queries the current volume or -1 if line no longer active.
+     * Add a chunk.
+     * 
+     * @param buff the chunk to add.
+     */
+    public void addChunk(byte[]buff)
+    {
+        buff=resample(buff);
+        if (buff!=null)
+        {
+            synchronized(this.queue)
+            {
+                this.queue.add(buff);
+            }
+        }
+        if (this.playThread!=null)
+            if (this.isAsleep)
+                this.playThread.interrupt();
+
+    }
+    
+    /**
+     * Resample an exisiting chunk.
+     * 
+     * @param buff the chunk to resample.
+     * 
+     * @return the resampled chunk.
+     */
+    private byte[] resample(byte[]buff)
+    {
+        if (!this.reSample)
+            return buff;
+        int l=buff.length;
+        java.util.ArrayList<Byte>ar=new java.util.ArrayList<>(l+l/9);
+        for (int i=0;i<l-1;i+=2)
+        {
+            ar.add(buff[i]);
+            ar.add(buff[i+1]);
+            if (this.adjustFreq<1.0)
+                this.adjustFreq +=this.RATE;
+            else
+            {
+                ar.add(buff[i]);
+                ar.add(buff[i+1]);
+                this.adjustFreq-=1.0;
+            }
+        }
+        return convertArrayList(ar);
+    }
+    
+    /**
+     * Converts an ArrayList of byte into an array of byte.
+     * 
+     * @param ar
+     * 
+     * @return 
+     */
+    private byte[] convertArrayList (java.util.ArrayList<Byte>ar)
+    {
+        if (ar==null)
+            return null;
+        int l=ar.size();
+        if (l==0)
+            return null;
+        byte  []f=new byte[l];
+        for (int i=0;i<l;i++)
+        {
+            f[i]=ar.get(i);
+        }
+        return f;
+    }
+    /**
+     * This gets a chunk from the SSSS and possibly resamples it.
+     * 
+     * @param cpu the cpu used. A1 points to the end of the queue.
+     * 
+     * @return a new chunk, or null.
+     */
+    private byte[] resample(smsqmulator.cpu.MC68000Cpu cpu)
+    {
+        byte[] buff;
+        short[]mem=cpu.getMemory();                             // cpu memory array
+        int a1=cpu.addr_regs[1];                                // end of sample(s)
+        int count=a1-this.start;                                // number of bytes in sample(s)
+        if (count==0)
+            return null;
+        if (!this.reSample)
+        {                                                       // no resamplng, split words into bytes
+            int index=0;
+            buff=new byte[count];                               
+            for (int i=this.start/2;i<a1/2;i++)
+            {
+                short sh=mem[i];
+                buff[index]=(byte)(sh>>>8);
+                index++;
+                buff[index]=(byte)sh;
+                index++;
+            }
+            
+            return buff;
+        }
+        else
+        {
+            java.util.ArrayList<Byte>ar=new java.util.ArrayList<>(count+count/9);// try to guess approximate size of resulting reasmped bytes
+            for (int i=this.start/2;i<a1/2;i++)
+            {
+                short sh=mem[i];
+                ar.add((byte)(sh>>>8));
+                ar.add((byte)sh);
+                if (this.adjustFreq<1.0)
+                    this.adjustFreq +=SampledSound.RATE;
+                else
+                {
+                    ar.add((byte)(sh>>>8));
+                    ar.add((byte)sh);
+                    this.adjustFreq-=1.0;
+                }
+            }
+            buff=convertArrayList(ar);                          // convert Arraylist into bytes
+        }
+        return buff;
+    }
+    
+    /**
+     * Queries the current volume.
      * NB contrary to documentation, this doesn't work.
      * 
-     * @return the volume.
+     * @return the volume or -1 if line no longer active.
      */
     public int queryVolume()
     {
@@ -344,20 +415,26 @@ public class SampledSound
         return this.stopSound;
     }
     
+    public boolean isStillPlaying(smsqmulator.cpu.MC68000Cpu cpu)
+    {
+        return !this.queue.isEmpty();
+    }
+    
     /**
      * The independent thread that fills the DataLine.
      * Most of the time this thread will just be sleeping.
      */
     class PlayThread extends Thread
-    {
-        private final int sleepPeriod = 2;                       // nbr of milliseconds to sleep if no sound got
-        private final int waitPeriod=7000/sleepPeriod;            // nbr of loops till we reach 7 seconds
+    {                                                           
+        private final int sleepPeriod = 2;                      // nbr of milliseconds to sleep if no sound got
+        private final int waitPeriod=7000/sleepPeriod;          // nbr of loops till we reach 7 seconds
         private boolean stopNow=false;
         @Override
         @SuppressWarnings({"UnusedAssignment", "SleepWhileInLoop"})
         public void run()
         {
-            int num,count=0;
+            int count=0;
+            byte []bytes;
             while(true)                                         // playthread is one continuous loop
             {
                 try
@@ -367,54 +444,53 @@ public class SampledSound
                         sourceDataLine.flush();
                         sourceDataLine.stop();
                         this.stopNow=false; 
-                        isAsleep=true;
-                        nextOut=((memory[(qin+base)/2]<<16)+(memory[(qin+base+2)/2]&0xffff))/2; // this is where next element to insert goes= end of my output queue
-        
-                        Thread.sleep(2000000000);               // sleep for a LOOONG time
-                        isAsleep=false;                         
+                        isAsleep=true;                          // signal that this thread is asleep now
+                        
+                        Thread.sleep(2000000000);               // sleep for a LOOONG time...
+                        isAsleep=false;                         // ... until it is interrupted (normally this will divert to the catch block!)
                         sourceDataLine.start();                 // and then restart the dataline
                     }
-                    if ((num=getFromQueue())!=0)            // (try to) get bytes from queue
+                    if ((bytes=getFromQueue())!=null)           // (try to) get chunk from queue
                     {   
-                        if (!this.stopNow)
-                            num=sourceDataLine.write(myBuffer,0,num);// write content of my buffer into source dataline
+                        if (!this.stopNow)                      // got one, possibly play them
+                            sourceDataLine.write(bytes,0,bytes.length);// write chunk into source dataline, blocks until done
                         count=0;  
                     }
-                    else 
+                    else                                        // no chunk got, queue is empty
                     {
-                        if (querySoundClose())
+                        if (querySoundClose())                  // should I close the sound at end?
                         {
-                            count=this.waitPeriod;
+                            count=this.waitPeriod;              // yes, so prepare for it
                             closeSound(false);
-                            sourceDataLine.drain();
+                            sourceDataLine.drain();             // make sure this played to the end
                         }
-                        count++;
-                        if (count>=this.waitPeriod)
+                        count++;                                // one more wait 
+                        if (count>=this.waitPeriod)             // have I waited long enough?   
                         {
                             count=0;
-                            if (queueIsEmpty())             // one last check
+                            if (queueIsEmpty())                 // yes, one last check
                             {
                                 isAsleep=true;
-                                sourceDataLine.stop();      // after x seconds of silence, stop line
+                                sourceDataLine.stop();          // after x seconds of silence, stop line
                                 sourceDataLine.flush();
                                 
-                                Thread.sleep(2000000000);   // sleep for a LOOONG time
+                                Thread.sleep(2000000000);       // sleep for a LOOONG time
                                 isAsleep=false;
-                                sourceDataLine.start();     // and then restart the dataline
+                                sourceDataLine.start();         // and then restart the dataline
                             } 
                         }
                         else
-                            Thread.sleep(this.sleepPeriod);
+                            Thread.sleep(this.sleepPeriod);     // I haven't waited long enough yet 
                     }
                 }
-                catch (InterruptedException e)                  // called when sound is to be played
+                catch (InterruptedException e)                  // called when thread was asleep and sound is to be played
                 {
-                    isAsleep=false;
+                    isAsleep=false;                             // I'm no longer asleep
                     sourceDataLine.start();
                 }
                 catch (Exception e) 
                 { 
-                   //nop 
+                   //nop                                        // what could that be?
                 }
             }
         }

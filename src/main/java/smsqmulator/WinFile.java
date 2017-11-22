@@ -29,8 +29,9 @@ package smsqmulator;
  * 
  * Each file has a "clusterchain", an arraylist with the number of the cluster for a part of the file.
  * <p>
- * @author and copyright (c) wolfgang lenerz 2013-2016
+ * @author and copyright (c) wolfgang lenerz 2013-2017
  * @version  
+ *  1.07 when getting the length of the roor dir, get the length set in root sector - the fileheader length.
  *  1.06 readbytes, getLine, sendMultipleBytes: return bytes read / sent in D1.L, not only D1.W, trap#3,D0=6 implemented.
  *  1.05 small optimizations, files aren't passed chan defn blk,setFileHeader call uses the true length of the file, not the one passed in the header block 
  *  1.04 readBytes catches EOF error when nothing is read from channel
@@ -278,7 +279,7 @@ public class WinFile
                     {
                         cpu.writeMemoryWord(i, 0);
                     }
-                    cpu.writeMemoryLong(A1,this.drive.getIntFromFAT(WinDrive.QWA_RLEN));
+                    cpu.writeMemoryLong(A1,this.drive.getIntFromFAT(WinDrive.QWA_RLEN)-WinDriver.HEADER_LENGTH);
                     cpu.writeMemoryWord(A1+4,0x00ff);
                 }
                 cpu.addr_regs[1]+=temp;

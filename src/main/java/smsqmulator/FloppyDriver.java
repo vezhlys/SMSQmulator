@@ -233,13 +233,16 @@ public class FloppyDriver
     
     /**
      * This routine formats a medium.
-;
+;       smsqe gets : 
 ;       d0 cr   format type / error code
 ;       d1 cr   format dependent flag or zero / good sectors
 ;       d2  r   total sectors
 ;       d7 c  p drive ID / number
 ;       a3 c  p linkage block
 ;       a4 c  p drive definition
+* 
+*  here: d2 = density wished
+* 
      */
     public void formatDrive()
     {
@@ -258,7 +261,7 @@ public class FloppyDriver
                 if (file.exists())
                 {
                     this.cpu.data_regs[0]=Types.ERR_FMTF;
-                    return;            // there is something seriously wrong here, this file should have been opened when SMSQmuator started, better not delete it,or lese couldn't create it.
+                    return;            // there is something seriously wrong here, this file should have been opened when SMSQmuator started, better not delete it, or else couldn't create it.
                 }
                 this.raFile[drive] = new java.io.RandomAccessFile(this.nativeFile[drive],"rw");// read/write access to this file
                 this.ioChannel[drive] = this.raFile[drive].getChannel();// and the associated file channel

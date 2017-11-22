@@ -1,10 +1,10 @@
-
 package smsqmulator;
 
 /**
  * Simulates an SMSQE fileheader for files on an NFA device.
  * @author and copyright (c) 2012-2017 Wolfgang Lenerz.
  * @version  
+ * 1.08 setAttrs implemented, try to set some native file attributes in header.
  * 1.07 setFileDates : setting a file date to a date before 01.01.1970 will set date to 01.01.1970.
  * 1.06 setFileDates implemented, sets the update date, never sets the backup date.
  * 1.05 offset no longer a variable.
@@ -49,8 +49,10 @@ public class NfaFileheader implements XfaFileheader
             l=(int) f.length();                             // length will be truncated if need be
             putIntL(0,l);                                   // set length of file in header
             l=(int)(f.lastModified()/1000)+Monitor.TIME_OFFSET;   // file date ** magic offset;                    
-            putIntL(0x34,l);                                // update date
-        }
+            putIntL(0x34,l);      
+        }  
+        //now try to set some attributes
+        this.header[4]=(byte)setAttrs(f);
     }
     
     /**
@@ -244,6 +246,45 @@ public class NfaFileheader implements XfaFileheader
         else
             l*=1000;
         f.setLastModified(l);
+    }
+    
+    /**
+     * Try to set some attributes
+     * @param attrs
+     * @param f
+     * @return 
+     * 
+     * 
+     * ADVSHR
+     * A archive
+     * D directory
+     * V
+     * S system
+     * H hidden
+     * R read only
+     */
+    public static final int setAttrs (java.io.File f)
+    { 
+        int attrs=0;
+        try
+        {
+            java.nio.file.attribute.DosFileAttributes attr =java.nio.file.Files.readAttributes(f.toPath(), java.nio.file.attribute.DosFileAttributes.class);
+            if (attr.isArchive())
+                attrs+=32;
+            if (attr.isSystem())
+                attrs+=4;
+            if (attr.isReadOnly())
+                attrs+=1;
+            if (attr.isHidden())
+                attrs+=2;
+            if (attr.isDirectory())
+                attrs+=16;
+        } 
+        catch (UnsupportedOperationException  | java.io.IOException x) 
+        {
+            // NOP
+        }
+        return attrs;
     }
     
 }

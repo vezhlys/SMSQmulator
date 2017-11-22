@@ -16,7 +16,6 @@ import smsqmulator.cpu.Size;
  */
 public class ORI implements InstructionSet
 {
-    
     @Override
     public final void register( final smsqmulator.cpu.MC68000Cpu cpu2)
     {
@@ -30,14 +29,13 @@ public class ORI implements InstructionSet
                 base = 0;
                 i = new smsqmulator.cpu.Instruction()   
                 {
-                    
-                    
                     @Override
-                    public final void execute(int opcode,smsqmulator.cpu.MC68000Cpu cpu)
+                    public final void execute(int opcode,final smsqmulator.cpu.MC68000Cpu cpu)
                     {
                         int val=cpu.readMemoryWordPCInc()&0xff;
                         int address=0;
                         int temp;
+                        
                         switch ((opcode >>3)&7)
                         {
                             case 0:                             // Dn
@@ -112,10 +110,8 @@ public class ORI implements InstructionSet
                 base = 0x40; 
                 i = new smsqmulator.cpu.Instruction()   
                 {
-                   
-                    
                     @Override
-                    public final void execute(int opcode,smsqmulator.cpu.MC68000Cpu cpu)
+                    public final void execute(int opcode,final smsqmulator.cpu.MC68000Cpu cpu)
                     {
                         int val=cpu.readMemoryWordPCInc();
                         int address=0;
@@ -186,10 +182,8 @@ public class ORI implements InstructionSet
                 base = 0x80;                                  // long sieed neg
                 i = new smsqmulator.cpu.Instruction()   
                 {
-                    
-                    
                     @Override
-                    public final void execute(int opcode,smsqmulator.cpu.MC68000Cpu cpu)
+                    public final void execute(int opcode,final smsqmulator.cpu.MC68000Cpu cpu)
                     {
                         int val=cpu.readMemoryLongPC();
                         cpu.pc_reg+=2;;

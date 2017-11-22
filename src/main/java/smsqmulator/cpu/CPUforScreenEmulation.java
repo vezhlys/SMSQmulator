@@ -3,7 +3,7 @@ package smsqmulator.cpu;
 /**
  * Object derived from CPU, used only when emulating QL screen and copying from there to display.
  * 
- * @author and copyright (C) Wolfgang Lenerz 2016.
+ * @author and copyright (C) Wolfgang Lenerz 2016-2017.
  * @version 
  * 1.00 derived from MC68000Cpu v.2.10.
  */

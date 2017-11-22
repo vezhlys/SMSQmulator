@@ -1,5 +1,4 @@
-
-package smsqmulator.cpu.instructions.ADD2Dn;;
+package smsqmulator.cpu.instructions.ADD2Dn;
 import smsqmulator.cpu.DisassembledOperand;
 import smsqmulator.cpu.InstructionSet;
 import smsqmulator.cpu.DisassembledInstruction;
